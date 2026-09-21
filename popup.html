@@ -1,0 +1,100 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      width: 280px;
+      padding: 16px;
+      background: #fff;
+      color: #1a1a2e;
+    }
+    .header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      margin-bottom: 16px;
+    }
+    .header h2 { font-size: 13px; font-weight: 700; color: #0073b1; }
+    .toggle-wrap { display: flex; align-items: center; gap: 8px; }
+    .toggle-wrap span { font-size: 11px; color: #666; }
+    .toggle {
+      width: 34px; height: 18px;
+      background: #ccc; border-radius: 9px;
+      cursor: pointer; position: relative;
+      transition: background 0.2s;
+    }
+    .toggle.on { background: #0073b1; }
+    .toggle::after {
+      content: '';
+      position: absolute;
+      width: 14px; height: 14px;
+      background: white;
+      border-radius: 50%;
+      top: 2px; left: 2px;
+      transition: left 0.2s;
+    }
+    .toggle.on::after { left: 18px; }
+    .field { margin-bottom: 14px; }
+    label { display: block; font-size: 11px; color: #555; margin-bottom: 5px; font-weight: 600; }
+    input[type=password] {
+      width: 100%; padding: 7px 10px;
+      border: 1px solid #ddd; border-radius: 6px;
+      font-size: 12px; color: #333;
+      outline: none;
+    }
+    input[type=password]:focus { border-color: #0073b1; }
+    .range-row { display: flex; align-items: center; gap: 8px; }
+    input[type=range] { flex: 1; accent-color: #0073b1; }
+    .range-val { font-size: 12px; font-weight: 700; color: #0073b1; min-width: 36px; text-align: right; }
+    .range-labels { display: flex; justify-content: space-between; font-size: 10px; color: #aaa; margin-top: 2px; }
+    .hint { font-size: 10px; color: #999; margin-top: 4px; line-height: 1.4; }
+    button {
+      width: 100%; padding: 8px;
+      background: #0073b1; color: white;
+      border: none; border-radius: 6px;
+      font-size: 13px; font-weight: 600;
+      cursor: pointer; margin-top: 2px;
+    }
+    button:hover { background: #005f96; }
+    .status { font-size: 11px; text-align: center; margin-top: 8px; min-height: 16px; }
+    .status.ok  { color: #27ae60; }
+    .status.err { color: #e74c3c; }
+    .divider { border: none; border-top: 1px solid #eee; margin: 14px 0; }
+  </style>
+</head>
+<body>
+  <div class="header">
+    <h2>LinkedIn Slop Filter</h2>
+    <div class="toggle-wrap">
+      <span id="toggleLabel">on</span>
+      <div id="toggle" class="toggle on"></div>
+    </div>
+  </div>
+
+  <div class="field">
+    <label>Jev API key</label>
+    <input type="password" id="apiKey" placeholder="Paste your TypeSafe API key">
+    <div class="hint">Get one at <strong>console.typesafe.ai/keys</strong></div>
+  </div>
+
+  <hr class="divider">
+
+  <div class="field">
+    <label>Slop threshold</label>
+    <div class="range-row">
+      <input type="range" id="threshold" min="40" max="95" value="75">
+      <span class="range-val" id="threshVal">75%</span>
+    </div>
+    <div class="range-labels"><span>permissive</span><span>strict</span></div>
+    <div class="hint">Posts scoring above this are faded. Hover any faded post to read it.</div>
+  </div>
+
+  <button id="save">Save settings</button>
+  <div class="status" id="status"></div>
+
+  <script src="popup.js"></script>
+</body>
+</html>
