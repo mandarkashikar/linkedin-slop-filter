@@ -1,18 +1,32 @@
-// Service worker — routes Jev API calls from content script
-// (avoids CORS issues; service workers have full network access)
+// Service worker — routes classification calls from content script.
+// Supports two backends: Jev (TypeSafe AI) and local Ollama.
 
 chrome.runtime.onMessage.addListener((msg, _sender, sendResponse) => {
   if (msg.type === "classify") {
     classifyPosts(msg.posts).then(sendResponse).catch(err => sendResponse({ error: err.message }));
-    return true; // keep channel open for async response
+    return true;
   }
 });
 
 async function classifyPosts(posts) {
-  const { apiKey, threshold } = await chrome.storage.sync.get({ apiKey: "", threshold: 0.75 });
+  const { apiKey, threshold, backend, ollamaModel } = await chrome.storage.sync.get({
+    apiKey: "",
+    threshold: 0.75,
+    backend: "jev",
+    ollamaModel: "gemma4"
+  });
+
+  if (backend === "ollama") {
+    return classifyOllama(posts, threshold, ollamaModel);
+  }
 
   if (!apiKey) return { error: "no_api_key" };
+  return classifyJev(posts, apiKey, threshold);
+}
 
+// --- Jev (TypeSafe AI) -------------------------------------------------------
+
+async function classifyJev(posts, apiKey, threshold) {
   const results = await Promise.all(
     posts.map(async ({ id, text }) => {
       try {
@@ -54,4 +68,52 @@ async function classifyPosts(posts) {
   );
 
   return { results, threshold };
+}
+
+// --- Ollama ------------------------------------------------------------------
+
+const OLLAMA_PROMPT = (text) => `You are a LinkedIn post classifier. Analyze the following post and return ONLY a JSON object with these two fields:
+- "slop": float 0.0–1.0 — how much this post is AI-generated filler, thought-leader platitudes, vague inspiration, or generic advice with no original insight
+- "ad": float 0.0–1.0 — how much this post is promotional advertising or sponsored content
+
+Post:
+"""
+${text.slice(0, 1500)}
+"""
+
+Respond with ONLY the JSON object, nothing else.`;
+
+async function classifyOllama(posts, threshold, model) {
+  const results = await Promise.all(
+    posts.map(async ({ id, text }) => {
+      try {
+        const res = await fetch("http://localhost:11434/api/generate", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            model: model || "gemma4",
+            prompt: OLLAMA_PROMPT(text),
+            stream: false,
+            format: "json"
+          })
+        });
+
+        if (!res.ok) throw new Error(`Ollama HTTP ${res.status}`);
+
+        const data = await res.json();
+        const parsed = JSON.parse(data.response);
+        const slop = clamp(parsed.slop ?? 0);
+        const ad   = clamp(parsed.ad   ?? 0);
+        return { id, noul: Math.max(slop, ad), slop, ad };
+      } catch (e) {
+        return { id, error: e.message };
+      }
+    })
+  );
+
+  return { results, threshold };
+}
+
+function clamp(v) {
+  return Math.min(1, Math.max(0, parseFloat(v) || 0));
 }

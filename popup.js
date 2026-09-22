@@ -3,35 +3,50 @@ const $ = id => document.getElementById(id);
 let enabled = true;
 
 // Load saved settings
-chrome.storage.sync.get({ apiKey: "", threshold: 0.75, enabled: true }, s => {
-  $("apiKey").value = s.apiKey;
-  $("threshold").value = Math.round(s.threshold * 100);
-  $("threshVal").textContent = `${Math.round(s.threshold * 100)}%`;
-  setToggle(s.enabled);
-});
+chrome.storage.sync.get(
+  { apiKey: "", threshold: 0.75, enabled: true, backend: "ollama", ollamaModel: "gemma4" },
+  s => {
+    $("apiKey").value       = s.apiKey;
+    $("ollamaModel").value  = s.ollamaModel;
+    $("threshold").value    = Math.round(s.threshold * 100);
+    $("threshVal").textContent = `${Math.round(s.threshold * 100)}%`;
+    setToggle(s.enabled);
+    setBackend(s.backend);
+  }
+);
 
-// Threshold slider live update
+// Backend switcher
+$("backend").addEventListener("change", () => setBackend($("backend").value));
+
+function setBackend(val) {
+  $("backend").value = val;
+  $("ollamaModelField").classList.toggle("hidden", val !== "ollama");
+  $("jevKeyField").classList.toggle("hidden", val !== "jev");
+}
+
+// Threshold slider
 $("threshold").addEventListener("input", () => {
   $("threshVal").textContent = `${$("threshold").value}%`;
 });
 
-// Toggle
+// On/off toggle
 function setToggle(val) {
   enabled = val;
   $("toggle").classList.toggle("on", val);
   $("toggleLabel").textContent = val ? "on" : "off";
 }
-
 $("toggle").addEventListener("click", () => setToggle(!enabled));
 
 // Save
 $("save").addEventListener("click", () => {
-  const apiKey   = $("apiKey").value.trim();
-  const threshold = parseInt($("threshold").value, 10) / 100;
+  const backend     = $("backend").value;
+  const apiKey      = $("apiKey").value.trim();
+  const ollamaModel = $("ollamaModel").value.trim() || "gemma4";
+  const threshold   = parseInt($("threshold").value, 10) / 100;
+  const st          = $("status");
 
-  chrome.storage.sync.set({ apiKey, threshold, enabled }, () => {
-    const st = $("status");
-    if (!apiKey) {
+  chrome.storage.sync.set({ apiKey, threshold, enabled, backend, ollamaModel }, () => {
+    if (backend === "jev" && !apiKey) {
       st.textContent = "Add a Jev API key to activate filtering.";
       st.className = "status err";
     } else {

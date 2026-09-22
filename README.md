@@ -1,24 +1,49 @@
 # LinkedIn Slop Filter
 
-A Chrome extension prototype that classifies LinkedIn feed posts with TypeSafe AI's Jev model and fades likely AI slop or advertising.
+A Chrome extension that watches your LinkedIn feed and fades posts that are likely AI-generated filler, thought-leader platitudes, or ads.
 
-## Current behavior
+## How it works
 
-- Watches the LinkedIn feed as posts load.
-- Batches new post text for classification.
-- Asks Jev whether each post is low-value AI filler or an advertisement.
-- Fades posts above a configurable confidence threshold.
-- Keeps the API key in Chrome's synced extension storage; no key is committed to this repository.
+Posts are batched as they load, sent to a classifier, and scored 0–1 for *slop* and *ad*. Posts above your threshold are faded to 10% opacity. Hover any faded post to reveal it.
 
-## Load locally
+Two classifier backends are supported:
+
+| Backend | What it needs | Privacy |
+|---|---|---|
+| **Local Ollama** (default) | Ollama running locally with any model | Fully local, nothing leaves your machine |
+| **Jev (TypeSafe AI)** | A TypeSafe API key | Cloud API call per post |
+
+## Install locally
 
 1. Open `chrome://extensions` in Chrome.
-2. Enable **Developer mode**.
-3. Choose **Load unpacked** and select this folder.
-4. Open the extension popup, enter a Jev API key, and set the threshold.
-5. Visit LinkedIn and scroll the feed.
+2. Enable **Developer mode** (top-right toggle).
+3. Click **Load unpacked** and select this folder.
+4. The extension icon appears in your toolbar.
+
+## Use with Ollama (local, private)
+
+1. [Install Ollama](https://ollama.com) if you haven't already.
+2. Pull a model: `ollama pull gemma4` (or `llama3.2`, `mistral`, etc.)
+3. Make sure Ollama is running: `ollama serve`
+4. Open the extension popup, set Backend to **Local Ollama**, enter the model name, save.
+5. Visit LinkedIn and scroll the feed — posts start getting scored immediately.
+
+> Ollama must be running on `localhost:11434`. The extension calls it directly from the service worker.
+
+## Use with Jev (TypeSafe AI)
+
+1. Get an API key at [console.typesafe.ai/keys](https://console.typesafe.ai/keys).
+2. Open the extension popup, set Backend to **Jev — TypeSafe AI**, paste your key, save.
+
+## Settings
+
+- **Backend** — Ollama (local) or Jev (cloud).
+- **Ollama model** — any model you have installed (`ollama list` to check).
+- **Slop threshold** — 40%–95%. Posts scoring above this are faded. Higher = stricter.
+- **On/Off toggle** — disable filtering without uninstalling.
 
 ## Status
 
-This is a safe prototype: it moves no money, needs no backend, and contains no committed credentials. The planned hybrid architecture and research behind it are documented in [APPROACH.md](APPROACH.md).
+Prototype. LinkedIn changes its DOM structure often — if posts stop being detected, check the selectors in `content.js`.
 
+Research and architecture notes: [APPROACH.md](APPROACH.md)

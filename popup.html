@@ -39,13 +39,14 @@
     .toggle.on::after { left: 18px; }
     .field { margin-bottom: 14px; }
     label { display: block; font-size: 11px; color: #555; margin-bottom: 5px; font-weight: 600; }
-    input[type=password] {
+    input[type=password], input[type=text], select {
       width: 100%; padding: 7px 10px;
       border: 1px solid #ddd; border-radius: 6px;
       font-size: 12px; color: #333;
       outline: none;
+      background: #fff;
     }
-    input[type=password]:focus { border-color: #0073b1; }
+    input[type=password]:focus, input[type=text]:focus, select:focus { border-color: #0073b1; }
     .range-row { display: flex; align-items: center; gap: 8px; }
     input[type=range] { flex: 1; accent-color: #0073b1; }
     .range-val { font-size: 12px; font-weight: 700; color: #0073b1; min-width: 36px; text-align: right; }
@@ -63,6 +64,7 @@
     .status.ok  { color: #27ae60; }
     .status.err { color: #e74c3c; }
     .divider { border: none; border-top: 1px solid #eee; margin: 14px 0; }
+    .hidden { display: none; }
   </style>
 </head>
 <body>
@@ -75,6 +77,20 @@
   </div>
 
   <div class="field">
+    <label>Backend</label>
+    <select id="backend">
+      <option value="ollama">Local Ollama (private, no API key)</option>
+      <option value="jev">Jev — TypeSafe AI</option>
+    </select>
+  </div>
+
+  <div class="field" id="ollamaModelField">
+    <label>Ollama model</label>
+    <input type="text" id="ollamaModel" placeholder="e.g. gemma4, llama3.2, mistral">
+    <div class="hint">Run <strong>ollama list</strong> in Terminal to see installed models.</div>
+  </div>
+
+  <div class="field hidden" id="jevKeyField">
     <label>Jev API key</label>
     <input type="password" id="apiKey" placeholder="Paste your TypeSafe API key">
     <div class="hint">Get one at <strong>console.typesafe.ai/keys</strong></div>
