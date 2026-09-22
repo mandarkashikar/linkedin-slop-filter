@@ -1,0 +1,57 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>LinkedIn Slop Filter Demo</title>
+  <style>
+    :root { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; color: #1f2328; background: #f3f2ef; }
+    * { box-sizing: border-box; }
+    body { margin: 0; }
+    header { position: sticky; top: 0; z-index: 2; padding: 18px 24px; background: #0a66c2; color: white; box-shadow: 0 2px 10px #0002; }
+    header strong { font-size: 20px; }
+    header span { display: block; margin-top: 4px; opacity: .85; font-size: 13px; }
+    main { max-width: 720px; margin: 24px auto; padding: 0 16px 40px; }
+    .note { margin-bottom: 16px; padding: 12px 16px; border: 1px solid #d8dee4; border-radius: 10px; background: #fff; font-size: 14px; }
+    .feed-shared-update-v2 { position: relative; margin: 14px 0; padding: 20px; border: 1px solid #ddd; border-radius: 12px; background: white; box-shadow: 0 1px 2px #00000012; }
+    .author { display: flex; gap: 10px; align-items: center; margin-bottom: 12px; font-weight: 650; }
+    .avatar { display: grid; width: 42px; height: 42px; place-items: center; border-radius: 50%; background: #e7f3ff; color: #0a66c2; }
+    .meta { display: block; color: #666; font-size: 12px; font-weight: 400; }
+    .break-words { white-space: pre-line; font-size: 15px; line-height: 1.5; }
+    .chips { margin-top: 14px; color: #666; font-size: 13px; }
+  </style>
+</head>
+<body>
+  <header>
+    <strong>LinkedIn Slop Filter · local Ollama demo</strong>
+    <span>Posts are classified locally by gemma4. Hover a faded card to reveal it.</span>
+  </header>
+  <main>
+    <div class="note">The extension should fade generic filler and promotional content while leaving specific, experience-based posts visible.</div>
+
+    <article class="feed-shared-update-v2" data-urn="demo-slop">
+      <div class="author"><div class="avatar">TG</div><div>Taylor Growth<span class="meta">Thought Leadership Strategist · 2h</span></div></div>
+      <div class="feed-shared-text"><div class="break-words">I woke up at 5 AM and realized success is not about working harder. It is about working smarter. Your mindset is your superpower. Stop making excuses. Start building the future you deserve. Agree?</div></div>
+      <div class="chips">#leadership #mindset #success</div>
+    </article>
+
+    <article class="feed-shared-update-v2" data-urn="demo-real">
+      <div class="author"><div class="avatar">AP</div><div>Avery Patel<span class="meta">Payments PM · 3h</span></div></div>
+      <div class="feed-shared-text"><div class="break-words">We reduced checkout abandonment from 18.4% to 12.7% by showing the delivery estimate before account creation. The experiment ran for 21 days across 46,218 sessions. The surprising part: conversion improved most for returning mobile shoppers, not new users.</div></div>
+      <div class="chips">Specific result · experiment details</div>
+    </article>
+
+    <article class="feed-shared-update-v2" data-urn="demo-ad">
+      <div class="author"><div class="avatar">AI</div><div>Acme Intelligence<span class="meta">Promoted</span></div></div>
+      <div class="feed-shared-text"><div class="break-words">Transform your business with the world's most powerful AI platform. Book a demo today and unlock unlimited growth with our seamless, game-changing solution.</div></div>
+      <div class="chips">Sponsored content</div>
+    </article>
+
+    <article class="feed-shared-update-v2" data-urn="demo-question">
+      <div class="author"><div class="avatar">SK</div><div>Sam Kim<span class="meta">Frontend engineer · 5h</span></div></div>
+      <div class="feed-shared-text"><div class="break-words">Has anyone measured MutationObserver overhead on a feed with more than 500 DOM nodes? I am seeing a 14 ms median callback on Chrome 128 and would love to compare profiling notes.</div></div>
+      <div class="chips">Concrete technical question</div>
+    </article>
+  </main>
+</body>
+</html>

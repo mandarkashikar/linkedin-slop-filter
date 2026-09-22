@@ -12,7 +12,7 @@ async function classifyPosts(posts) {
   const { apiKey, threshold, backend, ollamaModel } = await chrome.storage.sync.get({
     apiKey: "",
     threshold: 0.75,
-    backend: "jev",
+    backend: "ollama",
     ollamaModel: "gemma4"
   });
 
