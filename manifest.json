@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "LinkedIn Slop Filter",
-  "version": "0.1.0",
+  "version": "1.0.0",
   "description": "Auto-fades AI slop and ads on LinkedIn using Jev or a local Ollama model",
   "permissions": ["storage"],
   "host_permissions": [

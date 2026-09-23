@@ -59,8 +59,17 @@ Then open <http://127.0.0.1:8765/>. The extension classifies four sample posts l
 - **Slop threshold** — 40%–95%. Posts scoring above this are faded. Higher = stricter.
 - **On/Off toggle** — disable filtering without uninstalling.
 
+## UI & Visual Feedback (v1.0.0 Stable Baseline)
+
+- **Floating Status Pill**: Shows real-time counter (`🛡️ Slop Filter: X scanned · Y faded`) at bottom-right.
+- **Scanning Square**: Blue dashed bounding box with animated spinner badge (`🔄 classifying…`) on newly visible posts.
+- **Clean Posts**: Solid green bounding box (`✓ X% slop`) indicating legitimate, non-slop content.
+- **Slop / Ads**: Red dashed bounding box (`⚠️ X% slop` or `📢 X% ad`) and faded card opacity (hover to reveal).
+- **Infinite Scroll**: Preserves LinkedIn's feed scrolling continuity and handles dynamic lazy loading.
+- **Excluded Widgets**: "Start a post" creation box, news widgets, puzzle blocks, and recommendation sidebars remain completely unaffected.
+
 ## Status
 
-Prototype. LinkedIn changes its DOM structure often — if posts stop being detected, check the selectors in `content.js`.
+**v1.0.0 (UI & Functional Baseline)**: Post detection, UI bounding boxes, badge transitions, and infinite scroll are stable. Subsequent iterations focus on refining the AI classification prompt and scoring algorithm.
 
 Research and architecture notes: [APPROACH.md](APPROACH.md)
