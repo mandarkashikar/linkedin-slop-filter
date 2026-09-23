@@ -59,9 +59,13 @@ Then open <http://127.0.0.1:8765/>. The extension classifies four sample posts l
 - **Slop threshold** — 40%–95%. Posts scoring above this are faded. Higher = stricter.
 - **On/Off toggle** — disable filtering without uninstalling.
 
-## UI & Visual Feedback (v1.0.0 Stable Baseline)
+## UI & Features (v1.1.0)
 
-- **Floating Status Pill**: Shows real-time counter (`🛡️ Slop Filter: X scanned · Y faded`) at bottom-right.
+- **Draggable Floating Pill**: Reposition the pill anywhere on screen by dragging it; position persists across reloads via `localStorage`.
+- **Hiring Post Detection & Navigation**:
+  - Automatically identifies recruitment, team hiring, and job openings (`💼 Hiring` badge + blue outline).
+  - Hiring posts are **never** treated as ads or slop.
+  - Interactive **Next (`▶`) and Previous (`◀`)** buttons in the floating pill smoothly scroll to and highlight each hiring post in the feed.
 - **Scanning Square**: Blue dashed bounding box with animated spinner badge (`🔄 classifying…`) on newly visible posts.
 - **Clean Posts**: Solid green bounding box (`✓ X% slop`) indicating legitimate, non-slop content.
 - **Slop / Ads**: Red dashed bounding box (`⚠️ X% slop` or `📢 X% ad`) and faded card opacity (hover to reveal).
@@ -70,6 +74,6 @@ Then open <http://127.0.0.1:8765/>. The extension classifies four sample posts l
 
 ## Status
 
-**v1.0.0 (UI & Functional Baseline)**: Post detection, UI bounding boxes, badge transitions, and infinite scroll are stable. Subsequent iterations focus on refining the AI classification prompt and scoring algorithm.
+**v1.1.0**: Post detection, draggable UI, hiring classification, and feed navigation are active.
 
 Research and architecture notes: [APPROACH.md](APPROACH.md)

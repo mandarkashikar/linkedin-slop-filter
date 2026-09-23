@@ -16,24 +16,43 @@ const style = document.createElement("style");
 style.textContent = `
   #slop-filter-indicator {
     position: fixed !important;
-    bottom: 24px !important;
-    right: 24px !important;
+    bottom: 72px;
+    right: 24px;
     z-index: 2147483647 !important;
     background: #0a66c2 !important;
     color: white !important;
     font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif !important;
     font-size: 12px !important;
     font-weight: 600 !important;
-    padding: 7px 16px !important;
+    padding: 6px 14px !important;
     border-radius: 20px !important;
     box-shadow: 0 4px 16px rgba(0,0,0,0.3) !important;
     display: flex !important;
     align-items: center !important;
-    gap: 8px !important;
-    transition: all 0.3s ease !important;
-    cursor: default !important;
+    gap: 7px !important;
+    cursor: grab !important;
     user-select: none !important;
     pointer-events: auto !important;
+    touch-action: none !important;
+    transition: background 0.3s ease, box-shadow 0.2s ease, transform 0.1s ease !important;
+  }
+  #slop-filter-indicator.slop-dragging {
+    cursor: grabbing !important;
+    box-shadow: 0 10px 30px rgba(0,0,0,0.45) !important;
+    opacity: 0.95 !important;
+    transform: scale(1.03) !important;
+    transition: none !important;
+  }
+  .slop-drag-handle {
+    cursor: grab !important;
+    opacity: 0.65 !important;
+    font-size: 13px !important;
+    line-height: 1 !important;
+    user-select: none !important;
+    margin-right: -1px !important;
+  }
+  .slop-drag-handle:hover {
+    opacity: 1 !important;
   }
   @keyframes slop-spin {
     0% { transform: rotate(0deg); }
@@ -69,6 +88,21 @@ style.textContent = `
     outline-offset: -2px !important;
     border-radius: 8px !important;
   }
+  .slop-box-hiring {
+    position: relative !important;
+    outline: 2px solid #0073b1 !important;
+    outline-offset: -2px !important;
+    border-radius: 8px !important;
+    box-shadow: 0 0 10px rgba(0, 115, 177, 0.25) !important;
+  }
+  @keyframes slop-hiring-glow {
+    0% { outline-color: #0073b1; box-shadow: 0 0 0 rgba(0, 115, 177, 0); }
+    50% { outline-color: #00a0dc; box-shadow: 0 0 22px rgba(0, 160, 220, 0.7); }
+    100% { outline-color: #0073b1; box-shadow: 0 0 10px rgba(0, 115, 177, 0.25); }
+  }
+  .slop-hiring-pulse {
+    animation: slop-hiring-glow 1.2s ease-in-out !important;
+  }
   .jev-slop-faded {
     opacity: 0.18 !important;
     filter: grayscale(60%) !important;
@@ -103,28 +137,275 @@ style.textContent = `
     background: rgba(39, 174, 96, 0.9) !important;
     color: #fff !important;
   }
+  .jev-badge-hiring {
+    background: #0073b1 !important;
+    color: #fff !important;
+  }
   .jev-badge-pending {
     background: rgba(10, 102, 194, 0.9) !important;
     color: #fff !important;
   }
+  .slop-divider {
+    display: inline-block !important;
+    width: 1px !important;
+    height: 14px !important;
+    background: rgba(255, 255, 255, 0.3) !important;
+    margin: 0 4px !important;
+  }
+  .slop-hiring-cluster {
+    display: inline-flex !important;
+    align-items: center !important;
+    gap: 4px !important;
+  }
+  .slop-hiring-btn {
+    background: rgba(255, 255, 255, 0.2) !important;
+    color: white !important;
+    border: none !important;
+    border-radius: 12px !important;
+    padding: 3px 8px !important;
+    font-size: 11px !important;
+    font-weight: 600 !important;
+    cursor: pointer !important;
+    display: inline-flex !important;
+    align-items: center !important;
+    gap: 3px !important;
+    transition: background 0.15s ease, transform 0.1s ease !important;
+    user-select: none !important;
+    font-family: inherit !important;
+  }
+  .slop-hiring-btn:hover:not(:disabled) {
+    background: rgba(255, 255, 255, 0.35) !important;
+  }
+  .slop-hiring-btn:disabled {
+    opacity: 0.5 !important;
+    cursor: not-allowed !important;
+  }
+  .slop-nav-btn {
+    background: rgba(255, 255, 255, 0.2) !important;
+    color: white !important;
+    border: none !important;
+    border-radius: 10px !important;
+    width: 22px !important;
+    height: 20px !important;
+    font-size: 10px !important;
+    font-weight: bold !important;
+    cursor: pointer !important;
+    display: inline-flex !important;
+    align-items: center !important;
+    justify-content: center !important;
+    transition: background 0.15s ease, transform 0.1s ease !important;
+    user-select: none !important;
+    padding: 0 !important;
+    font-family: inherit !important;
+  }
+  .slop-nav-btn:hover:not(:disabled) {
+    background: rgba(255, 255, 255, 0.35) !important;
+    transform: scale(1.08) !important;
+  }
+  .slop-nav-btn:active:not(:disabled) {
+    transform: scale(0.92) !important;
+  }
+  .slop-nav-btn:disabled {
+    opacity: 0.35 !important;
+    cursor: not-allowed !important;
+  }
 `;
 document.head.appendChild(style);
 
-// --- Indicator widget ------------------------------------------------------
+// --- Indicator widget & Hiring Navigator -----------------------------------
 
 let scannedCount = 0;
 let fadedCount = 0;
 let indicatorEl = null;
+const hiringPosts = [];
+let currentHiringIndex = -1;
+
+function updateHiringNavUI() {
+  const trigger = document.getElementById("slop-hiring-trigger");
+  const prevBtn = document.getElementById("slop-prev-hiring");
+  const nextBtn = document.getElementById("slop-next-hiring");
+  if (!trigger || !prevBtn || !nextBtn) return;
+
+  const validPosts = hiringPosts.filter(el => el && el.isConnected);
+  const count = validPosts.length;
+
+  if (count === 0) {
+    trigger.textContent = "💼 Hiring (0)";
+    trigger.disabled = true;
+    prevBtn.disabled = true;
+    nextBtn.disabled = true;
+  } else {
+    trigger.disabled = false;
+    prevBtn.disabled = false;
+    nextBtn.disabled = false;
+    if (currentHiringIndex >= 0 && currentHiringIndex < count) {
+      trigger.textContent = `💼 Hiring ${currentHiringIndex + 1}/${count}`;
+    } else {
+      trigger.textContent = `💼 Hiring (${count})`;
+    }
+  }
+}
+
+function goToNextHiringPost() {
+  const validPosts = hiringPosts.filter(el => el && el.isConnected);
+  if (!validPosts.length) return;
+
+  currentHiringIndex = (currentHiringIndex + 1) % validPosts.length;
+  scrollToHiringPost(validPosts[currentHiringIndex]);
+  updateHiringNavUI();
+}
+
+function goToPrevHiringPost() {
+  const validPosts = hiringPosts.filter(el => el && el.isConnected);
+  if (!validPosts.length) return;
+
+  currentHiringIndex = (currentHiringIndex - 1 + validPosts.length) % validPosts.length;
+  scrollToHiringPost(validPosts[currentHiringIndex]);
+  updateHiringNavUI();
+}
+
+function scrollToHiringPost(postEl) {
+  if (!postEl) return;
+  postEl.scrollIntoView({ behavior: "smooth", block: "center" });
+  postEl.classList.remove("slop-hiring-pulse");
+  void postEl.offsetWidth; // trigger reflow for animation restart
+  postEl.classList.add("slop-hiring-pulse");
+  setTimeout(() => {
+    if (postEl.isConnected) postEl.classList.remove("slop-hiring-pulse");
+  }, 1300);
+}
+
+function makeDraggable(el) {
+  let isDragging = false;
+  let startX = 0, startY = 0;
+  let initialLeft = 0, initialTop = 0;
+  let hasMoved = false;
+
+  // Restore saved position if available
+  try {
+    const saved = localStorage.getItem("slop_indicator_pos");
+    if (saved) {
+      const pos = JSON.parse(saved);
+      if (typeof pos.top === "number" && typeof pos.left === "number") {
+        const maxTop = window.innerHeight - 50;
+        const maxLeft = window.innerWidth - 100;
+        const boundedTop = Math.max(10, Math.min(pos.top, maxTop));
+        const boundedLeft = Math.max(10, Math.min(pos.left, maxLeft));
+        el.style.top = `${boundedTop}px`;
+        el.style.left = `${boundedLeft}px`;
+        el.style.bottom = "auto";
+        el.style.right = "auto";
+      }
+    }
+  } catch (e) {}
+
+  el.addEventListener("pointerdown", (e) => {
+    // Never start a drag when clicking buttons inside the widget
+    if (e.target.closest("button, .slop-nav-btn, .slop-hiring-btn")) {
+      return;
+    }
+
+    isDragging = true;
+    hasMoved = false;
+    startX = e.clientX;
+    startY = e.clientY;
+
+    const rect = el.getBoundingClientRect();
+    initialLeft = rect.left;
+    initialTop = rect.top;
+
+    try {
+      el.setPointerCapture(e.pointerId);
+    } catch (err) {}
+    el.classList.add("slop-dragging");
+  });
+
+  el.addEventListener("pointermove", (e) => {
+    if (!isDragging) return;
+
+    const dx = e.clientX - startX;
+    const dy = e.clientY - startY;
+
+    if (Math.abs(dx) > 3 || Math.abs(dy) > 3) {
+      hasMoved = true;
+    }
+
+    let newLeft = initialLeft + dx;
+    let newTop = initialTop + dy;
+
+    // Viewport bounds constraint with padding
+    const maxLeft = window.innerWidth - el.offsetWidth - 8;
+    const maxTop = window.innerHeight - el.offsetHeight - 8;
+
+    newLeft = Math.max(8, Math.min(newLeft, maxLeft));
+    newTop = Math.max(8, Math.min(newTop, maxTop));
+
+    el.style.left = `${newLeft}px`;
+    el.style.top = `${newTop}px`;
+    el.style.bottom = "auto";
+    el.style.right = "auto";
+  });
+
+  const onPointerEnd = (e) => {
+    if (!isDragging) return;
+    isDragging = false;
+    el.classList.remove("slop-dragging");
+    try {
+      el.releasePointerCapture(e.pointerId);
+    } catch (err) {}
+
+    if (hasMoved) {
+      try {
+        const rect = el.getBoundingClientRect();
+        localStorage.setItem("slop_indicator_pos", JSON.stringify({
+          top: Math.round(rect.top),
+          left: Math.round(rect.left)
+        }));
+      } catch (err) {}
+    }
+  };
+
+  el.addEventListener("pointerup", onPointerEnd);
+  el.addEventListener("pointercancel", onPointerEnd);
+}
 
 function updateIndicator(msg, status = "active") {
   if (!indicatorEl) {
     indicatorEl = document.createElement("div");
     indicatorEl.id = "slop-filter-indicator";
+    indicatorEl.innerHTML = `
+      <span class="slop-drag-handle" title="Drag to reposition">⠿</span>
+      <span id="slop-status-text">🛡️ ${msg}</span>
+      <span class="slop-divider"></span>
+      <span id="slop-hiring-cluster" class="slop-hiring-cluster">
+        <button id="slop-hiring-trigger" class="slop-hiring-btn" title="Jump to next hiring post" disabled>💼 Hiring (0)</button>
+        <button id="slop-prev-hiring" class="slop-nav-btn" title="Previous hiring post" disabled>◀</button>
+        <button id="slop-next-hiring" class="slop-nav-btn" title="Next hiring post" disabled>▶</button>
+      </span>
+    `;
     document.body.appendChild(indicatorEl);
+
+    makeDraggable(indicatorEl);
+
+    document.getElementById("slop-hiring-trigger")?.addEventListener("click", (e) => {
+      e.stopPropagation();
+      goToNextHiringPost();
+    });
+    document.getElementById("slop-next-hiring")?.addEventListener("click", (e) => {
+      e.stopPropagation();
+      goToNextHiringPost();
+    });
+    document.getElementById("slop-prev-hiring")?.addEventListener("click", (e) => {
+      e.stopPropagation();
+      goToPrevHiringPost();
+    });
+  } else {
+    const statusSpan = document.getElementById("slop-status-text");
+    if (statusSpan) {
+      statusSpan.textContent = `🛡️ ${msg}`;
+    }
   }
-  const html = `🛡️ ${msg}`;
-  if (indicatorEl.innerHTML === html) return;
-  indicatorEl.innerHTML = html;
+
   if (status === "error") {
     indicatorEl.style.background = "#d93025";
   } else if (status === "disabled") {
@@ -132,6 +413,8 @@ function updateIndicator(msg, status = "active") {
   } else {
     indicatorEl.style.background = "#0a66c2";
   }
+
+  updateHiringNavUI();
 }
 
 updateIndicator("Slop Filter: Active");
@@ -451,12 +734,22 @@ function flush() {
           continue;
         }
 
-        const score = result.noul ?? 0;
+        const textHasHiringKeywords = /\b(?:we(?:'re| are)|\bi(?:'m| am)|my team is|our team is)\s+(?:hiring|recruiting|looking for)\b|#hiring\b|\bopen role(?:s)?\b|\bjob opening(?:s)?\b|\bwe have open position(?:s)?\b/i.test(item.text);
+        const isHiring = result.is_hiring || (result.hiring >= 0.55 && result.hiring >= (result.slop ?? 0) && result.hiring >= (result.ad ?? 0)) || textHasHiringKeywords;
+        const score = isHiring ? 0 : (result.noul ?? 0);
         const pct = Math.round(score * 100);
-        console.log(`[LinkedIn Slop Filter] Post ${result.id} -> slop=${result.slop}, ad=${result.ad}, max=${score} (threshold=${threshold})`);
+        console.log(`[LinkedIn Slop Filter] Post ${result.id} -> slop=${result.slop}, ad=${result.ad}, hiring=${result.hiring}, isHiring=${isHiring}`);
 
-        // Transition progress icon to %slop and update square outline
-        if (score >= threshold) {
+        // Transition progress icon to %slop / Hiring and update square outline
+        if (isHiring) {
+          item.el.classList.add("slop-box-hiring");
+          setBadge(item.el, item.id, "💼 Hiring", "jev-badge-hiring");
+          if (!hiringPosts.includes(item.el)) {
+            hiringPosts.push(item.el);
+            updateHiringNavUI();
+          }
+          console.log(`[LinkedIn Slop Filter] Marked post ${result.id} as Hiring`);
+        } else if (score >= threshold) {
           item.el.classList.add("slop-box-slop");
           item.el.classList.add(FADE_CLASS);
           const label = result.ad > result.slop ? `📢 ${pct}% ad` : `⚠️ ${pct}% slop`;

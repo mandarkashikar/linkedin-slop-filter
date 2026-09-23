@@ -55,7 +55,11 @@ async function classifyJev(posts, apiKey, threshold) {
               },
               is_ad: {
                 type: "noul",
-                instructions: "This post is primarily a promotional advertisement or sponsored content"
+                instructions: "This post is primarily a promotional advertisement or commercial product pitch"
+              },
+              is_hiring: {
+                type: "noul",
+                instructions: "This post is announcing a job vacancy, team recruitment, or hiring for an open role"
               }
             }
           })
@@ -69,7 +73,17 @@ async function classifyJev(posts, apiKey, threshold) {
         const data = await res.json();
         const slop = data.answers.is_slop?.noul ?? 0;
         const ad   = data.answers.is_ad?.noul ?? 0;
-        return { id, noul: Math.max(slop, ad), slop, ad };
+        let hiring = data.answers.is_hiring?.noul ?? 0;
+
+        const hiringRegex = /\b(?:we(?:'re| are)|\bi(?:'m| am)|my team is|our team is)\s+(?:hiring|recruiting|looking for)\b|#hiring\b|\bopen role(?:s)?\b|\bjob opening(?:s)?\b/i;
+        if (hiringRegex.test(text)) {
+          hiring = Math.max(hiring, 0.85);
+        }
+
+        const isHiring = hiring >= 0.55 && hiring >= slop && hiring >= ad;
+        const noul = isHiring ? 0 : Math.max(slop, ad);
+
+        return { id, noul, slop, ad, hiring, is_hiring: isHiring };
       } catch (e) {
         return { id, error: e.message };
       }
@@ -81,31 +95,35 @@ async function classifyJev(posts, apiKey, threshold) {
 
 // --- Ollama ------------------------------------------------------------------
 
-const OLLAMA_PROMPT = (text) => `You are an expert LinkedIn feed curator. Analyze the post text below and rate it on two scales from 0.0 to 1.0:
+const OLLAMA_PROMPT = (text) => `You are an expert LinkedIn feed curator. Analyze the post text below and rate it on three scales from 0.0 to 1.0:
 
-1. "slop" (0.0 to 1.0):
+1. "hiring" (0.0 to 1.0):
+- HIGH (0.7–1.0):
+  * The author or company is recruiting, hiring, or sharing open roles/vacancies ("We're hiring", "Looking for a PM to join our team", "My team has an open role", "Apply at link", "Hiring engineers in Toronto").
+  * Sharing referral opportunities or recruiting for teams.
+- LOW (0.0–0.2):
+  * Not recruiting or hiring. (Note: A job seeker saying "I am looking for a job" is NOT hiring).
+
+CRITICAL RULE: If a post is announcing a job opportunity or recruitment, it is a legitimate career opportunity. You MUST rate "hiring" HIGH (0.7–1.0) and "slop" and "ad" LOW (0.0–0.2). Do NOT classify hiring as a commercial ad!
+
+2. "slop" (0.0 to 1.0):
 - HIGH (0.7–1.0):
   * Low-effort AI-generated generic filler.
   * Empty thought-leader platitudes and generic motivational quotes ("Mindset is everything", "I woke up at 5 AM...").
   * Engagement bait ("Agree?", "Thoughts?", "Drop an emoji below").
   * Generic superficial lists ("Top 10 AI tools you must know 🚀") without original depth.
 - LOW (0.0–0.2):
-  * Authentic career milestones ("Excited to share I joined Google...", "celebrating 3 years...").
-  * Company acquisitions, funding announcements, or real business news ("Polarity was acquired by Wander").
-  * Concrete engineering case studies, post-mortems, or technical questions with real details/metrics.
-  * Organic personal reflections or stories with authentic human voice and specific details.
+  * Authentic career milestones, engineering case studies, post-mortems, and team hiring announcements.
 
-2. "ad" (0.0 to 1.0):
+3. "ad" (0.0 to 1.0):
 - HIGH (0.7–1.0):
-  * Explicit sponsored advertising or promotional campaigns.
-  * Aggressive product sales pitches ("Book a demo today", "Use promo code", "Buy our course now").
-  * Lead generation funnels ("Comment 'INFO' to receive my free template").
+  * Explicit sponsored advertising, paid promotional campaigns, commercial product sales pitches ("Book a demo today", "Use promo code", "Buy our course now").
+  * Commercial lead generation funnels.
 - LOW (0.0–0.2):
-  * Organic founder sharing what they built or asking for developer feedback.
-  * Legitimate team hiring announcements ("We are hiring a Senior PM in Toronto").
-  * General company/industry news or partnership announcements.
+  * Legitimate team hiring announcements (job openings are NOT commercial ads!).
+  * Organic founder updates or engineering articles.
 
-3. "ui_noise": If the text appears to be UI navigation buttons, creation prompts (e.g. "Start a post", "Video Photo Write article"), or empty noise, return {"slop": 0.0, "ad": 0.0}.
+4. "ui_noise": If the text appears to be UI navigation buttons, creation prompts (e.g. "Start a post", "Video Photo Write article"), or empty noise, return {"slop": 0.0, "ad": 0.0, "hiring": 0.0}.
 
 Post text:
 """
@@ -113,7 +131,7 @@ ${text.slice(0, 1500)}
 """
 
 Return ONLY a JSON object with this exact format:
-{"slop": <float between 0.0 and 1.0>, "ad": <float between 0.0 and 1.0>}`;
+{"slop": <float between 0.0 and 1.0>, "ad": <float between 0.0 and 1.0>, "hiring": <float between 0.0 and 1.0>}`;
 
 async function getAvailableOllamaModel(preferredModel) {
   try {
@@ -163,7 +181,18 @@ async function classifyOllama(posts, threshold, model) {
         const parsed = safeParseJson(data.response) || {};
         const slop = clamp(parsed.slop ?? 0);
         const ad   = clamp(parsed.ad   ?? 0);
-        return { id, noul: Math.max(slop, ad), slop, ad };
+        let hiring = clamp(parsed.hiring ?? 0);
+
+        // Fast keyword heuristic to reliably detect explicit hiring phrases
+        const hiringRegex = /\b(?:we(?:'re| are)|\bi(?:'m| am)|my team is|our team is)\s+(?:hiring|recruiting|looking for)\b|#hiring\b|\bopen role(?:s)?\b|\bjob opening(?:s)?\b/i;
+        if (hiringRegex.test(text)) {
+          hiring = Math.max(hiring, 0.85);
+        }
+
+        const isHiring = hiring >= 0.55 && hiring >= slop && hiring >= ad;
+        const noul = isHiring ? 0 : Math.max(slop, ad);
+
+        return { id, noul, slop, ad, hiring, is_hiring: isHiring };
       } catch (e) {
         console.error(`[Slop Filter] Classification failed for post ${id}:`, e.message);
         return { id, error: e.message };
