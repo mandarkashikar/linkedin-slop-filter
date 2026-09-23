@@ -158,17 +158,28 @@ function findPosts(root = document) {
   if (document.hidden) return [];
   const posts = new Set();
 
-  // 1. Structural search via action buttons (Like, Comment, Repost)
+  // 1. Primary: Direct children of feed container via action buttons (100% reliable)
   try {
-    const likeButtons = root.querySelectorAll("button[aria-label*='Like' i], button[aria-label*='React' i], button[aria-label*='Comment' i]");
-    for (const btn of likeButtons) {
+    const actionButtons = root.querySelectorAll(
+      "button[aria-label*='Like' i], button[aria-label*='React' i], button[aria-label*='Comment' i], button[aria-label*='Repost' i], " +
+      "[role='button'][aria-label*='Like' i], [role='button'][aria-label*='React' i]"
+    );
+    for (const btn of actionButtons) {
+      // Direct child of feed content is always the exact post card
+      const directFeedItem = btn.closest(".scaffold-finite-scroll__content > *");
+      if (directFeedItem && !directFeedItem.classList.contains("scaffold-finite-scroll__loading-indicator")) {
+        posts.add(directFeedItem);
+        continue;
+      }
+
+      // Fallback walking up to find nearest card boundary
       let p = btn.parentElement;
       while (p && p !== document.body && p.tagName !== "MAIN") {
         if (
+          p.classList.contains("feed-shared-update-v2") ||
           p.getAttribute("role") === "listitem" ||
           p.getAttribute("data-urn") ||
-          p.getAttribute("data-id") ||
-          p.classList.contains("feed-shared-update-v2")
+          p.getAttribute("data-id")
         ) {
           if (!p.classList.contains("scaffold-finite-scroll") && !p.classList.contains("scaffold-finite-scroll__content")) {
             posts.add(p);
@@ -191,33 +202,37 @@ function findPosts(root = document) {
     }
   } catch (e) {}
 
-  // 2. Direct attribute selectors (role='listitem', data-urn, etc.)
+  // 2. Direct feed item inspection inside scaffold-finite-scroll__content
   try {
-    const listItems = root.querySelectorAll("[role='listitem'], [data-urn*='activity'], [data-activity-urn], .feed-shared-update-v2");
-    for (const item of listItems) {
-      if (
-        item.offsetHeight >= 100 &&
-        item.offsetHeight <= 3000 &&
-        item.offsetWidth >= 250 &&
-        !item.classList.contains("scaffold-finite-scroll") &&
-        !item.classList.contains("scaffold-finite-scroll__content")
-      ) {
-        posts.add(item);
+    const feedContent = root.querySelector(".scaffold-finite-scroll__content");
+    if (feedContent) {
+      for (const child of feedContent.children) {
+        if (
+          child.offsetHeight >= 120 &&
+          !child.classList.contains("scaffold-finite-scroll__loading-indicator") &&
+          child.querySelector("button[aria-label*='Like' i], button[aria-label*='React' i], .feed-shared-social-action-bar, .social-details-social-actions")
+        ) {
+          posts.add(child);
+        }
       }
     }
   } catch (e) {}
 
-  // 3. Demo page fallback
+  // 3. Fallback for demo page and generic feed cards
   try {
-    root.querySelectorAll("article.feed-shared-update-v2").forEach(el => posts.add(el));
+    root.querySelectorAll("article.feed-shared-update-v2, .feed-shared-update-v2").forEach(el => {
+      if (el.offsetHeight >= 120 && !el.classList.contains("scaffold-finite-scroll__content")) {
+        posts.add(el);
+      }
+    });
   } catch (e) {}
 
-  // Deduplication: Keep innermost card if nested, or outermost card
+  // Deduplication: Keep outermost post card, discard any inner nested items!
   const rawList = Array.from(posts);
   const filtered = rawList.filter(el => {
     for (const other of rawList) {
-      if (other !== el && el.contains(other)) {
-        return false;
+      if (other !== el && other.contains(el)) {
+        return false; // el is nested inside other, drop el and keep the outer card!
       }
     }
     return true;
@@ -235,7 +250,7 @@ function findPosts(root = document) {
       return false;
     }
 
-    // 2. Exclude recommendation carousels / side modules / jobs / sentinel
+    // 2. Exclude recommendation carousels / side modules / jobs / puzzles
     if (
       el.querySelector("[data-view-name*='job-card'], .feed-shared-news-module") ||
       el.classList.contains("feed-shared-news-module") ||
@@ -265,15 +280,14 @@ function extractText(post) {
     return null;
   }
 
-  // 1. Try known specific text selectors (using textContent to prevent synchronous layout reflow)
+  // 1. Try known specific text selectors for post body
   const selectors = [
     ".feed-shared-update-v2__description",
     ".feed-shared-inline-show-more-text",
-    ".feed-shared-text",
     ".update-components-text",
+    ".feed-shared-text",
     "[data-ad-preview='message']",
-    ".break-words",
-    "[dir='ltr']"
+    ".break-words"
   ];
 
   for (const sel of selectors) {
@@ -284,11 +298,11 @@ function extractText(post) {
     }
   }
 
-  // 2. Search readable text elements inside the post (without innerText reflow)
-  const candidates = post.querySelectorAll("p, span, div");
+  // 2. Search readable text elements inside the post (skipping author headers, buttons, social counts)
+  const candidates = post.querySelectorAll(".update-components-text, .feed-shared-text, .break-words, p, span, div");
   let longest = "";
   for (const el of candidates) {
-    if (el.closest("header, button, nav, .social-details-social-counts, .feed-shared-social-actions, .comments-comment-item")) {
+    if (el.closest("header, button, nav, .feed-shared-actor, .update-components-actor, .social-details-social-counts, .feed-shared-social-actions, .comments-comment-item")) {
       continue;
     }
     if (el.children.length > 4) continue;
@@ -412,6 +426,7 @@ function flush() {
 
         if (result.error) {
           console.warn(`[LinkedIn Slop Filter] Post ${result.id} failed classification:`, result.error);
+          item.el.removeAttribute(CHECKED_ATTR); // allow retry on transient error
           continue;
         }
 
@@ -429,7 +444,6 @@ function flush() {
           console.log(`[LinkedIn Slop Filter] Faded post ${result.id} with label "${label}"`);
         } else {
           // Clean post: Remove scanning box outline completely!
-          // No permanent outline on clean posts to preserve native LinkedIn styling.
           // Show subtle clean checkmark badge in top-right:
           setBadge(item.el, item.id, `✓ ${pct}% slop`, "jev-badge-clean");
         }
