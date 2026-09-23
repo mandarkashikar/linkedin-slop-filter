@@ -63,6 +63,12 @@ style.textContent = `
     outline-offset: -2px !important;
     border-radius: 8px !important;
   }
+  .slop-box-clean {
+    position: relative !important;
+    outline: 2px solid #27ae60 !important;
+    outline-offset: -2px !important;
+    border-radius: 8px !important;
+  }
   .jev-slop-faded {
     opacity: 0.18 !important;
     filter: grayscale(60%) !important;
@@ -75,7 +81,7 @@ style.textContent = `
   .jev-badge {
     position: absolute !important;
     top: 12px !important;
-    right: 54px !important;
+    right: 76px !important;
     font-size: 11px !important;
     font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif !important;
     padding: 3px 10px !important;
@@ -87,6 +93,7 @@ style.textContent = `
     box-shadow: 0 1px 4px rgba(0,0,0,0.2) !important;
     display: inline-flex !important;
     align-items: center !important;
+    white-space: nowrap !important;
   }
   .jev-badge-slop {
     background: rgba(217, 48, 37, 0.95) !important;
@@ -157,38 +164,41 @@ chrome.storage.onChanged.addListener(changes => {
 function isExcludedWidget(el) {
   if (!el || el === document.body || el.tagName === "MAIN") return true;
 
-  // 1. Exclude "Start a post" creation widget (any trigger, wrapper, or creation box)
+  // 1. "Start a post" creation box (match class, data attribute, or trigger)
   if (
-    el.closest(".share-box-feed-entry, .share-box-feed-entry__wrapper, [data-view-name*='feed-creation'], .share-box") ||
-    el.querySelector(".share-box-feed-entry, .share-box-feed-entry__wrapper, [data-view-name*='feed-creation'], .share-box-feed-entry__trigger") ||
     el.classList.contains("share-box-feed-entry") ||
     el.classList.contains("share-box-feed-entry__wrapper") ||
     el.classList.contains("share-box-feed-entry__trigger") ||
-    /start\s+a\s+post/i.test(el.textContent || "")
+    el.querySelector(".share-box-feed-entry__trigger") ||
+    el.querySelector("[data-view-name*='feed-creation']") ||
+    el.querySelector(".share-box-feed-entry")
   ) {
-    const hasAuthor = el.querySelector(".update-components-actor, .feed-shared-actor, [data-view-name*='actor']");
-    const hasLike = el.querySelector("button[aria-label*='Like' i], button[aria-label*='React' i]");
-    if (!hasAuthor || !hasLike) {
-      return true; // Exclude creation box!
-    }
+    return true;
   }
 
-  // 2. Exclude recommendation carousels / side modules / jobs / puzzles
+  const text = el.textContent || "";
   if (
-    el.querySelector("[data-view-name*='job-card'], .feed-shared-news-module") ||
-    el.classList.contains("feed-shared-news-module") ||
-    el.textContent?.includes("Jobs recommended for you") ||
-    el.textContent?.includes("Add to your feed") ||
-    el.textContent?.includes("Today’s puzzles")
+    /Start\s+a\s+post/i.test(text) &&
+    !el.querySelector("button[aria-label*='Like' i], button[aria-label*='React' i], button[aria-label*='Comment' i]")
   ) {
-    return true; // Exclude widget!
+    return true;
   }
 
-  // 3. Exclude infinite scroll containers or sentinels
+  // 2. Feed news, side modules, puzzles, and loading indicators
+  if (
+    el.classList.contains("feed-shared-news-module") ||
+    el.classList.contains("scaffold-finite-scroll__loading-indicator") ||
+    el.querySelector(".feed-shared-news-module") ||
+    /Today[’']s puzzles/i.test(text) ||
+    /Jobs recommended for you/i.test(text)
+  ) {
+    return true;
+  }
+
+  // 3. The entire feed container itself is not an individual post
   if (
     el.classList.contains("scaffold-finite-scroll") ||
-    el.classList.contains("scaffold-finite-scroll__content") ||
-    el.classList.contains("scaffold-finite-scroll__loading-indicator")
+    el.classList.contains("scaffold-finite-scroll__content")
   ) {
     return true;
   }
@@ -200,7 +210,8 @@ function findPosts(root = document) {
   if (document.hidden) return [];
   const posts = new Set();
 
-  // 1. Primary: Walk up from action buttons (Like, React, Comment, Repost)
+  // Strategy 1: Action buttons (Like, React, Comment, Repost)
+  // Legitimate LinkedIn posts ALWAYS contain social action buttons.
   try {
     const actionButtons = root.querySelectorAll(
       "button[aria-label*='Like' i], button[aria-label*='React' i], button[aria-label*='Comment' i], button[aria-label*='Repost' i], " +
@@ -208,67 +219,74 @@ function findPosts(root = document) {
     );
 
     for (const btn of actionButtons) {
+      // Skip buttons that are inside comment sections
+      if (btn.closest(".comments-comment-item, .comments-comments-list, .feed-shared-inline-comments")) {
+        continue;
+      }
+
+      // 1a. Direct child of feed content is always the exact post card
+      const directFeedItem = btn.closest(".scaffold-finite-scroll__content > *");
+      if (directFeedItem) {
+        if (!isExcludedWidget(directFeedItem)) {
+          posts.add(directFeedItem);
+        }
+        continue;
+      }
+
+      // 1b. Fallback: Walk up until reaching a post card boundary
       let p = btn.parentElement;
-      let postCard = null;
+      let candidate = null;
       while (p && p !== document.body && p.tagName !== "MAIN") {
         if (p.classList.contains("scaffold-finite-scroll") || p.classList.contains("scaffold-finite-scroll__content")) {
           break;
         }
-        // A true post card contains the author/actor header
-        if (p.querySelector(".update-components-actor, .feed-shared-actor, [data-view-name*='actor'], .feed-shared-actor__container-link")) {
-          postCard = p;
-          // If this ancestor is a top-level listitem or update-v2, stop here
+
+        // Avoid selecting internal reaction bar wrappers
+        const isInternalBar = p.classList.contains("feed-shared-social-action-bar") ||
+                              p.classList.contains("social-details-social-actions") ||
+                              p.classList.contains("feed-shared-social-actions");
+        if (!isInternalBar) {
           if (
             p.classList.contains("feed-shared-update-v2") ||
             p.getAttribute("role") === "listitem" ||
             p.getAttribute("data-urn") ||
             p.getAttribute("data-id") ||
+            p.getAttribute("data-view-name")?.includes("feed-full-update") ||
             p.tagName === "ARTICLE"
           ) {
+            candidate = p;
             break;
+          }
+          if (p.offsetHeight >= 120 && p.offsetWidth >= 250 && !candidate) {
+            candidate = p;
           }
         }
         p = p.parentElement;
       }
-      if (postCard && !isExcludedWidget(postCard)) {
-        posts.add(postCard);
+      if (candidate && !isExcludedWidget(candidate)) {
+        posts.add(candidate);
       }
     }
   } catch (e) {}
 
-  // 2. Direct feed item inspection inside scaffold-finite-scroll__content
+  // Strategy 2: Direct query for update containers (supports demo page and direct feed cards)
   try {
-    const feedContent = root.querySelector(".scaffold-finite-scroll__content");
-    if (feedContent) {
-      for (const child of feedContent.children) {
-        if (
-          child.offsetHeight >= 120 &&
-          !isExcludedWidget(child) &&
-          child.querySelector(".update-components-actor, .feed-shared-actor, [data-view-name*='actor']") &&
-          child.querySelector("button[aria-label*='Like' i], button[aria-label*='React' i], .feed-shared-social-action-bar, .social-details-social-actions")
-        ) {
-          posts.add(child);
-        }
-      }
-    }
-  } catch (e) {}
-
-  // 3. Fallback for demo page and direct update cards
-  try {
-    root.querySelectorAll("article.feed-shared-update-v2, .feed-shared-update-v2").forEach(el => {
+    root.querySelectorAll(
+      "article.feed-shared-update-v2, .feed-shared-update-v2, [data-view-name*='feed-full-update']"
+    ).forEach(el => {
       if (el.offsetHeight >= 120 && !isExcludedWidget(el)) {
         posts.add(el);
       }
     });
   } catch (e) {}
 
-  // Deduplication: Keep outermost post card, discard any inner nested elements
+  // Deduplication: Discard inner elements if an outer containing post card is also present
   const rawList = Array.from(posts);
   return rawList.filter(el => {
     if (isExcludedWidget(el)) return false;
     for (const other of rawList) {
       if (other !== el && other.contains(el)) {
-        return false; // el is nested inside other, keep the outer other!
+        return false; // keep the outer container
       }
     }
     return true;
@@ -340,7 +358,10 @@ function setBadge(post, id, text, cls) {
 }
 
 function removeBadge(post, id) {
-  post.querySelectorAll(`[data-badge-id="${id}"]`).forEach(el => el.remove());
+  if (id) {
+    post.querySelectorAll(`[data-badge-id="${id}"]`).forEach(el => el.remove());
+  }
+  post.querySelectorAll(".jev-badge").forEach(el => el.remove());
 }
 
 // --- Queue & sequential batching -------------------------------------------
@@ -462,8 +483,9 @@ function flush() {
 function cleanup(batch) {
   batch.forEach(p => {
     if (p.el && p.el.isConnected) {
-      removeBadge(p.el, p.id);
       p.el.classList.remove("slop-box-scanning");
+      p.el.classList.add("slop-box-clean");
+      setBadge(p.el, p.id, `✓ 0% slop`, "jev-badge-clean");
     }
   });
 }
@@ -472,11 +494,14 @@ function cleanup(batch) {
 
 function checkAndTriggerInfiniteScroll() {
   try {
-    const loadBtn = document.querySelector(
-      ".scaffold-finite-scroll__load-button, button[data-view-name*='load-more'], button[data-view-name*='finite-scroll']"
+    const loadButtons = document.querySelectorAll(
+      ".scaffold-finite-scroll__load-button, button[data-view-name*='load-more'], button[data-view-name*='finite-scroll'], button.artdeco-button--secondary"
     );
-    if (loadBtn && loadBtn.offsetParent !== null) {
-      loadBtn.click();
+    for (const btn of loadButtons) {
+      if (btn.offsetParent !== null && /load more|show more/i.test(btn.textContent || "")) {
+        btn.click();
+        break;
+      }
     }
   } catch (e) {}
 }
