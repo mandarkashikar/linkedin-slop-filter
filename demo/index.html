@@ -3,67 +3,744 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>LinkedIn Slop Filter Demo</title>
+  <title>LinkedIn Slop Filter — Live Interactive Demo</title>
   <style>
-    :root { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; color: #1f2328; background: #f3f2ef; }
-    * { box-sizing: border-box; }
-    body { margin: 0; }
-    header { position: sticky; top: 0; z-index: 2; padding: 18px 24px; background: #0a66c2; color: white; box-shadow: 0 2px 10px #0002; }
-    header strong { font-size: 20px; }
-    header span { display: block; margin-top: 4px; opacity: .85; font-size: 13px; }
-    main { max-width: 720px; margin: 24px auto; padding: 0 16px 40px; }
-    .note { margin-bottom: 16px; padding: 12px 16px; border: 1px solid #d8dee4; border-radius: 10px; background: #fff; font-size: 14px; }
-    .feed-shared-update-v2 { position: relative; margin: 14px 0; padding: 20px; border: 1px solid #ddd; border-radius: 12px; background: white; box-shadow: 0 1px 2px #00000012; }
-    .author { display: flex; gap: 10px; align-items: center; margin-bottom: 12px; font-weight: 650; }
-    .avatar { display: grid; width: 42px; height: 42px; place-items: center; border-radius: 50%; background: #e7f3ff; color: #0a66c2; }
-    .meta { display: block; color: #666; font-size: 12px; font-weight: 400; }
-    .break-words { white-space: pre-line; font-size: 15px; line-height: 1.5; }
-    .chips { margin-top: 14px; color: #666; font-size: 13px; }
+    :root {
+      --bg: #f3f2ef;
+      --card-bg: #ffffff;
+      --text-main: rgba(0, 0, 0, 0.9);
+      --text-muted: rgba(0, 0, 0, 0.6);
+      --linkedin-blue: #0a66c2;
+      --border-color: #e0e0e0;
+    }
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+      background: var(--bg);
+      color: var(--text-main);
+      -webkit-font-smoothing: antialiased;
+    }
+
+    /* Top LinkedIn Navbar */
+    .top-nav {
+      position: sticky;
+      top: 0;
+      z-index: 100;
+      background: #fff;
+      border-bottom: 1px solid rgba(0, 0, 0, 0.08);
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 0 24px;
+      height: 52px;
+    }
+    .nav-left { display: flex; align-items: center; gap: 8px; }
+    .nav-logo {
+      width: 34px;
+      height: 34px;
+      background: #0a66c2;
+      color: white;
+      border-radius: 4px;
+      display: grid;
+      place-items: center;
+      font-weight: 800;
+      font-size: 20px;
+      letter-spacing: -1px;
+    }
+    .search-mock {
+      background: #edf3f8;
+      border-radius: 4px;
+      padding: 6px 12px 6px 30px;
+      font-size: 13px;
+      color: #666;
+      width: 240px;
+      position: relative;
+    }
+    .search-mock::before {
+      content: "🔍";
+      position: absolute;
+      left: 10px;
+      font-size: 11px;
+      opacity: 0.6;
+    }
+    .nav-items { display: flex; gap: 24px; align-items: center; }
+    .nav-item {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 2px;
+      font-size: 11px;
+      color: #666;
+      cursor: pointer;
+    }
+    .nav-item.active { color: #191919; border-bottom: 2px solid #191919; height: 52px; justify-content: center; }
+
+    /* Layout grid */
+    .page-container {
+      max-width: 1128px;
+      margin: 20px auto;
+      padding: 0 16px;
+      display: grid;
+      grid-template-columns: 225px 1fr 300px;
+      gap: 24px;
+      align-items: start;
+    }
+
+    /* Left Sidebar */
+    .sidebar-card {
+      background: #fff;
+      border-radius: 10px;
+      border: 1px solid var(--border-color);
+      overflow: hidden;
+      margin-bottom: 12px;
+    }
+    .profile-banner { height: 54px; background: linear-gradient(135deg, #0a66c2, #004182); }
+    .profile-avatar-wrap {
+      margin-top: -30px;
+      margin-left: 16px;
+      width: 60px;
+      height: 60px;
+      border-radius: 50%;
+      border: 2px solid #fff;
+      background: #e7f3ff;
+      display: grid;
+      place-items: center;
+      font-weight: 700;
+      color: #0a66c2;
+    }
+    .profile-info { padding: 12px 16px 16px; }
+    .profile-name { font-size: 15px; font-weight: 600; line-height: 1.3; }
+    .profile-title { font-size: 12px; color: var(--text-muted); margin-top: 4px; line-height: 1.3; }
+
+    /* Feed Container */
+    .feed-container { display: flex; flex-direction: column; gap: 12px; }
+
+    /* Start a post box (Exempt widget) */
+    .share-box-feed-entry {
+      background: #fff;
+      border-radius: 10px;
+      border: 1px solid var(--border-color);
+      padding: 12px 16px;
+    }
+    .share-top-row { display: flex; gap: 10px; align-items: center; }
+    .share-avatar {
+      width: 44px;
+      height: 44px;
+      border-radius: 50%;
+      background: #e7f3ff;
+      color: #0a66c2;
+      display: grid;
+      place-items: center;
+      font-weight: bold;
+    }
+    .share-input-mock {
+      flex: 1;
+      height: 44px;
+      border-radius: 22px;
+      border: 1px solid rgba(0,0,0,0.15);
+      padding: 0 16px;
+      display: flex;
+      align-items: center;
+      font-size: 13px;
+      color: rgba(0,0,0,0.6);
+      font-weight: 600;
+      cursor: pointer;
+    }
+    .share-actions {
+      display: flex;
+      justify-content: space-around;
+      margin-top: 10px;
+      padding-top: 8px;
+    }
+    .share-act-btn {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      font-size: 13px;
+      font-weight: 600;
+      color: #5e5e5e;
+      cursor: pointer;
+    }
+
+    /* Feed Posts */
+    .feed-shared-update-v2 {
+      position: relative !important;
+      background: #fff;
+      border-radius: 10px;
+      border: 1px solid var(--border-color);
+      padding: 16px;
+      box-shadow: 0 1px 2px rgba(0,0,0,0.06);
+      transition: all 0.3s ease;
+    }
+    .author-header { display: flex; gap: 10px; align-items: center; margin-bottom: 12px; }
+    .author-avatar {
+      width: 44px;
+      height: 44px;
+      border-radius: 50%;
+      background: #e7f3ff;
+      color: #0a66c2;
+      display: grid;
+      place-items: center;
+      font-weight: 700;
+      font-size: 14px;
+    }
+    .author-name { font-size: 14px; font-weight: 600; }
+    .author-sub { font-size: 12px; color: var(--text-muted); }
+    .post-text {
+      font-size: 14px;
+      line-height: 1.45;
+      white-space: pre-line;
+      color: rgba(0,0,0,0.9);
+      margin-bottom: 14px;
+    }
+    .social-counts {
+      display: flex;
+      justify-content: space-between;
+      font-size: 12px;
+      color: var(--text-muted);
+      padding-bottom: 8px;
+      border-bottom: 1px solid #eee;
+    }
+    .social-actions-bar {
+      display: flex;
+      justify-content: space-around;
+      padding-top: 8px;
+    }
+    .action-btn {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      padding: 8px 12px;
+      border-radius: 4px;
+      border: none;
+      background: transparent;
+      color: #5e5e5e;
+      font-size: 13px;
+      font-weight: 600;
+      cursor: pointer;
+    }
+    .action-btn:hover { background: rgba(0,0,0,0.06); }
+
+    /* Right Sidebar */
+    .news-card {
+      background: #fff;
+      border-radius: 10px;
+      border: 1px solid var(--border-color);
+      padding: 16px;
+    }
+    .news-header { font-size: 15px; font-weight: 600; margin-bottom: 12px; }
+    .news-item { margin-bottom: 10px; font-size: 13px; font-weight: 600; }
+    .news-meta { font-size: 11px; color: var(--text-muted); font-weight: normal; }
+
+    /* LinkedIn Slop Filter CSS */
+    @keyframes slop-spin {
+      0% { transform: rotate(0deg); }
+      100% { transform: rotate(360deg); }
+    }
+    .slop-spinner {
+      display: inline-block;
+      width: 10px;
+      height: 10px;
+      border: 2px solid rgba(255, 255, 255, 0.4);
+      border-top-color: #ffffff;
+      border-radius: 50%;
+      animation: slop-spin 0.8s linear infinite;
+      vertical-align: middle;
+      margin-right: 5px;
+    }
+    .slop-box-scanning {
+      position: relative !important;
+      outline: 3px dashed #0a66c2 !important;
+      outline-offset: -2px !important;
+      border-radius: 8px !important;
+      transition: outline 0.2s ease !important;
+    }
+    .slop-box-slop {
+      position: relative !important;
+      outline: 3px dashed #d93025 !important;
+      outline-offset: -2px !important;
+      border-radius: 8px !important;
+    }
+    .slop-box-clean {
+      position: relative !important;
+      outline: 2px solid #27ae60 !important;
+      outline-offset: -2px !important;
+      border-radius: 8px !important;
+    }
+    .slop-box-hiring {
+      position: relative !important;
+      outline: 2px solid #0073b1 !important;
+      outline-offset: -2px !important;
+      border-radius: 8px !important;
+      box-shadow: 0 0 10px rgba(0, 115, 177, 0.25) !important;
+    }
+    @keyframes slop-hiring-glow {
+      0% { outline-color: #0073b1; box-shadow: 0 0 0 rgba(0, 115, 177, 0); }
+      50% { outline-color: #00a0dc; box-shadow: 0 0 24px rgba(0, 160, 220, 0.8); }
+      100% { outline-color: #0073b1; box-shadow: 0 0 10px rgba(0, 115, 177, 0.25); }
+    }
+    .slop-hiring-pulse {
+      animation: slop-hiring-glow 1.2s ease-in-out !important;
+    }
+    .jev-slop-faded {
+      opacity: 0.18 !important;
+      filter: grayscale(60%) !important;
+      transition: opacity 0.25s ease, filter 0.25s ease !important;
+    }
+    .jev-slop-faded:hover {
+      opacity: 1 !important;
+      filter: none !important;
+    }
+    .jev-badge {
+      position: absolute !important;
+      top: 12px !important;
+      right: 76px !important;
+      font-size: 11px !important;
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif !important;
+      padding: 3px 10px !important;
+      border-radius: 12px !important;
+      pointer-events: none !important;
+      z-index: 9999 !important;
+      letter-spacing: 0.02em !important;
+      font-weight: 600 !important;
+      box-shadow: 0 1px 4px rgba(0,0,0,0.2) !important;
+      display: inline-flex !important;
+      align-items: center !important;
+      white-space: nowrap !important;
+    }
+    .jev-badge-slop {
+      background: rgba(217, 48, 37, 0.95) !important;
+      color: #fff !important;
+    }
+    .jev-badge-clean {
+      background: rgba(39, 174, 96, 0.9) !important;
+      color: #fff !important;
+    }
+    .jev-badge-hiring {
+      background: #0073b1 !important;
+      color: #fff !important;
+    }
+    .jev-badge-pending {
+      background: rgba(10, 102, 194, 0.9) !important;
+      color: #fff !important;
+    }
+    .slop-divider {
+      display: inline-block !important;
+      width: 1px !important;
+      height: 14px !important;
+      background: rgba(255, 255, 255, 0.3) !important;
+      margin: 0 4px !important;
+    }
+    .slop-hiring-cluster {
+      display: inline-flex !important;
+      align-items: center !important;
+      gap: 4px !important;
+    }
+    .slop-hiring-btn {
+      background: rgba(255, 255, 255, 0.2) !important;
+      color: white !important;
+      border: none !important;
+      border-radius: 12px !important;
+      padding: 3px 8px !important;
+      font-size: 11px !important;
+      font-weight: 600 !important;
+      cursor: pointer !important;
+      display: inline-flex !important;
+      align-items: center !important;
+      gap: 3px !important;
+      transition: background 0.15s ease, transform 0.1s ease !important;
+      user-select: none !important;
+      font-family: inherit !important;
+    }
+    .slop-hiring-btn:hover:not(:disabled) {
+      background: rgba(255, 255, 255, 0.35) !important;
+    }
+    .slop-hiring-btn:disabled {
+      opacity: 0.5 !important;
+      cursor: not-allowed !important;
+    }
+    .slop-nav-btn {
+      background: rgba(255, 255, 255, 0.2) !important;
+      color: white !important;
+      border: none !important;
+      border-radius: 10px !important;
+      width: 22px !important;
+      height: 20px !important;
+      font-size: 10px !important;
+      font-weight: bold !important;
+      cursor: pointer !important;
+      display: inline-flex !important;
+      align-items: center !important;
+      justify-content: center !important;
+      transition: background 0.15s ease, transform 0.1s ease !important;
+      user-select: none !important;
+      padding: 0 !important;
+      font-family: inherit !important;
+    }
+    .slop-nav-btn:hover:not(:disabled) {
+      background: rgba(255, 255, 255, 0.35) !important;
+      transform: scale(1.08) !important;
+    }
+    .slop-nav-btn:active:not(:disabled) {
+      transform: scale(0.92) !important;
+    }
+    .slop-nav-btn:disabled {
+      opacity: 0.35 !important;
+      cursor: not-allowed !important;
+    }
+
+    #slop-filter-indicator {
+      position: fixed !important;
+      bottom: 72px;
+      right: 24px;
+      z-index: 2147483647 !important;
+      background: #0a66c2 !important;
+      color: white !important;
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif !important;
+      font-size: 12px !important;
+      font-weight: 600 !important;
+      padding: 6px 14px !important;
+      border-radius: 20px !important;
+      box-shadow: 0 4px 16px rgba(0,0,0,0.3) !important;
+      display: flex !important;
+      align-items: center !important;
+      gap: 7px !important;
+      cursor: grab !important;
+      user-select: none !important;
+      pointer-events: auto !important;
+      touch-action: none !important;
+      transition: background 0.3s ease, box-shadow 0.2s ease, transform 0.1s ease !important;
+    }
+    #slop-filter-indicator.slop-dragging {
+      cursor: grabbing !important;
+      box-shadow: 0 10px 30px rgba(0,0,0,0.45) !important;
+      opacity: 0.95 !important;
+      transform: scale(1.03) !important;
+      transition: none !important;
+    }
+    .slop-drag-handle {
+      cursor: grab !important;
+      opacity: 0.65 !important;
+      font-size: 13px !important;
+      line-height: 1 !important;
+      user-select: none !important;
+      margin-right: -1px !important;
+    }
+    .slop-drag-handle:hover {
+      opacity: 1 !important;
+    }
   </style>
 </head>
 <body>
-  <header>
-    <strong>LinkedIn Slop Filter · local Ollama demo</strong>
-    <span>Posts are classified locally by llama3.2. Hover a faded card to reveal it.</span>
+  <!-- Top Navigation -->
+  <header class="top-nav">
+    <div class="nav-left">
+      <div class="nav-logo">in</div>
+      <div class="search-mock">Search</div>
+    </div>
+    <div class="nav-items">
+      <div class="nav-item active">🏠 <span>Home</span></div>
+      <div class="nav-item">👥 <span>My Network</span></div>
+      <div class="nav-item">💼 <span>Jobs</span></div>
+      <div class="nav-item">💬 <span>Messaging</span></div>
+      <div class="nav-item">🔔 <span>Notifications</span></div>
+      <div class="nav-item">👤 <span>Me ▾</span></div>
+    </div>
   </header>
-  <main>
-    <div class="note">The extension should fade generic filler and promotional content while leaving specific, experience-based posts visible.</div>
 
-    <article class="feed-shared-update-v2" data-urn="demo-slop">
-      <div class="author"><div class="avatar">TG</div><div>Taylor Growth<span class="meta">Thought Leadership Strategist · 2h</span></div></div>
-      <div class="feed-shared-text"><div class="break-words">I woke up at 5 AM and realized success is not about working harder. It is about working smarter. Your mindset is your superpower. Stop making excuses. Start building the future you deserve. Agree?</div></div>
-      <div class="chips">#leadership #mindset #success</div>
-    </article>
+  <!-- Main Container -->
+  <div class="page-container">
+    <!-- Left Column -->
+    <aside>
+      <div class="sidebar-card">
+        <div class="profile-banner"></div>
+        <div class="profile-avatar-wrap">MK</div>
+        <div class="profile-info">
+          <div class="profile-name">Mandar Kashikar 🛡️</div>
+          <div class="profile-title">Lead Product Manager · Retail Omni-Commerce</div>
+        </div>
+      </div>
+    </aside>
 
-    <article class="feed-shared-update-v2" data-urn="demo-real">
-      <div class="author"><div class="avatar">AP</div><div>Avery Patel<span class="meta">Payments PM · 3h</span></div></div>
-      <div class="feed-shared-text"><div class="break-words">We reduced checkout abandonment from 18.4% to 12.7% by showing the delivery estimate before account creation. The experiment ran for 21 days across 46,218 sessions. The surprising part: conversion improved most for returning mobile shoppers, not new users.</div></div>
-      <div class="chips">Specific result · experiment details</div>
-    </article>
+    <!-- Center Feed -->
+    <main class="feed-container">
+      <!-- Start a post box (Explicitly ignored widget) -->
+      <div class="share-box-feed-entry">
+        <div class="share-top-row">
+          <div class="share-avatar">MK</div>
+          <div class="share-input-mock">Start a post, try writing with AI</div>
+        </div>
+        <div class="share-actions">
+          <div class="share-act-btn">📷 Video</div>
+          <div class="share-act-btn">🖼️ Photo</div>
+          <div class="share-act-btn">📝 Write article</div>
+        </div>
+      </div>
 
-    <article class="feed-shared-update-v2" data-urn="demo-hiring-1">
-      <div class="author"><div class="avatar">MK</div><div>Mandar Kashikar<span class="meta">Lead Product Manager · 1h</span></div></div>
-      <div class="feed-shared-text"><div class="break-words">We're hiring a Lead Product Manager in Toronto! Join our payments team to help build our next-gen retail omni-commerce platform. Check out the open role below or DM me directly for a referral. #hiring</div></div>
-      <div class="chips">Job opening · Team recruitment</div>
-    </article>
+      <!-- Post 1: Real authentic milestone post -->
+      <article class="feed-shared-update-v2" id="post-real-1" data-urn="urn:li:activity:101">
+        <div class="author-header">
+          <div class="author-avatar" style="background:#e8f5e9; color:#2e7d32;">AP</div>
+          <div>
+            <div class="author-name">Avery Patel · 1st</div>
+            <div class="author-sub">Payments PM at Stripe · 3h · 🌐</div>
+          </div>
+        </div>
+        <div class="post-text">We reduced checkout abandonment from 18.4% to 12.7% by showing the delivery estimate before account creation.
 
-    <article class="feed-shared-update-v2" data-urn="demo-ad">
-      <div class="author"><div class="avatar">AI</div><div>Acme Intelligence<span class="meta">Promoted</span></div></div>
-      <div class="feed-shared-text"><div class="break-words">Transform your business with the world's most powerful AI platform. Book a demo today and unlock unlimited growth with our seamless, game-changing solution.</div></div>
-      <div class="chips">Sponsored content</div>
-    </article>
+The experiment ran for 21 days across 46,218 sessions. The surprising part: conversion improved most for returning mobile shoppers, not new users.</div>
+        <div class="social-counts">
+          <span>👍 ❤️ 248</span>
+          <span>34 comments · 12 reposts</span>
+        </div>
+        <div class="social-actions-bar">
+          <button class="action-btn" aria-label="Like">👍 Like</button>
+          <button class="action-btn" aria-label="Comment">💬 Comment</button>
+          <button class="action-btn" aria-label="Repost">🔁 Repost</button>
+          <button class="action-btn" aria-label="Send">✈️ Send</button>
+        </div>
+      </article>
 
-    <article class="feed-shared-update-v2" data-urn="demo-hiring-2">
-      <div class="author"><div class="avatar">JS</div><div>Jordan Smith<span class="meta">Engineering Director · 4h</span></div></div>
-      <div class="feed-shared-text"><div class="break-words">My team is looking for Senior Frontend Engineers to work on developer tooling and React SDKs. We have open positions in New York and Remote. Reach out if you're interested in joining! #hiring</div></div>
-      <div class="chips">Open roles · Engineering recruitment</div>
-    </article>
+      <!-- Post 2: AI Slop post -->
+      <article class="feed-shared-update-v2" id="post-slop-1" data-urn="urn:li:activity:102">
+        <div class="author-header">
+          <div class="author-avatar" style="background:#fff3e0; color:#e65100;">TG</div>
+          <div>
+            <div class="author-name">Taylor Growth</div>
+            <div class="author-sub">Thought Leadership Strategist | 10x Mindset Coach · 2h · 🌐</div>
+          </div>
+        </div>
+        <div class="post-text">I woke up at 5 AM today and realized success is not about working harder. It is about working smarter.
 
-    <article class="feed-shared-update-v2" data-urn="demo-question">
-      <div class="author"><div class="avatar">SK</div><div>Sam Kim<span class="meta">Frontend engineer · 5h</span></div></div>
-      <div class="feed-shared-text"><div class="break-words">Has anyone measured MutationObserver overhead on a feed with more than 500 DOM nodes? I am seeing a 14 ms median callback on Chrome 128 and would love to compare profiling notes.</div></div>
-      <div class="chips">Concrete technical question</div>
-    </article>
-  </main>
+Your mindset is your superpower. Stop making excuses.
+Start building the future you deserve.
+
+Top 5 rules for winning in 2026:
+1. Wake up before everyone
+2. Protect your energy
+3. Execute without fear
+4. Learn AI prompts
+5. Never quit
+
+Agree? Drop a '🚀' below.</div>
+        <div class="social-counts">
+          <span>💡 1,290</span>
+          <span>412 comments · 85 reposts</span>
+        </div>
+        <div class="social-actions-bar">
+          <button class="action-btn" aria-label="Like">👍 Like</button>
+          <button class="action-btn" aria-label="Comment">💬 Comment</button>
+          <button class="action-btn" aria-label="Repost">🔁 Repost</button>
+          <button class="action-btn" aria-label="Send">✈️ Send</button>
+        </div>
+      </article>
+
+      <!-- Post 3: Hiring post 1 -->
+      <article class="feed-shared-update-v2" id="post-hiring-1" data-urn="urn:li:activity:103">
+        <div class="author-header">
+          <div class="author-avatar" style="background:#e3f2fd; color:#0d47a1;">MK</div>
+          <div>
+            <div class="author-name">Mandar Kashikar · 1st</div>
+            <div class="author-sub">Lead Product Manager · 1h · 🌐</div>
+          </div>
+        </div>
+        <div class="post-text">We're hiring a Lead Product Manager in Toronto!
+
+Join our payments team to help build our next-gen retail omni-commerce platform. You'll lead merchant integration APIs, checkout experience, and partner closely with our engineering teams.
+
+Check out the open role link below or DM me directly for a referral. #hiring</div>
+        <div class="social-counts">
+          <span>👍 412</span>
+          <span>56 comments · 28 reposts</span>
+        </div>
+        <div class="social-actions-bar">
+          <button class="action-btn" aria-label="Like">👍 Like</button>
+          <button class="action-btn" aria-label="Comment">💬 Comment</button>
+          <button class="action-btn" aria-label="Repost">🔁 Repost</button>
+          <button class="action-btn" aria-label="Send">✈️ Send</button>
+        </div>
+      </article>
+
+      <!-- Post 4: Commercial Ad -->
+      <article class="feed-shared-update-v2" id="post-ad-1" data-urn="urn:li:activity:104">
+        <div class="author-header">
+          <div class="author-avatar" style="background:#fce4ec; color:#c2185b;">AI</div>
+          <div>
+            <div class="author-name">Acme Intelligence</div>
+            <div class="author-sub">Promoted · Sponsored Content</div>
+          </div>
+        </div>
+        <div class="post-text">Transform your entire enterprise with the world's most powerful AI platform.
+
+Book a demo today and unlock unlimited growth with our seamless, game-changing enterprise solution. Special promo code inside!</div>
+        <div class="social-counts">
+          <span>👍 89</span>
+          <span>12 comments</span>
+        </div>
+        <div class="social-actions-bar">
+          <button class="action-btn" aria-label="Like">👍 Like</button>
+          <button class="action-btn" aria-label="Comment">💬 Comment</button>
+          <button class="action-btn" aria-label="Repost">🔁 Repost</button>
+          <button class="action-btn" aria-label="Send">✈️ Send</button>
+        </div>
+      </article>
+
+      <!-- Post 5: Hiring post 2 -->
+      <article class="feed-shared-update-v2" id="post-hiring-2" data-urn="urn:li:activity:105">
+        <div class="author-header">
+          <div class="author-avatar" style="background:#e0f2f1; color:#004d40;">JS</div>
+          <div>
+            <div class="author-name">Jordan Smith · 2nd</div>
+            <div class="author-sub">VP of Engineering at Datacore · 4h · 🌐</div>
+          </div>
+        </div>
+        <div class="post-text">My team is looking for Senior Frontend Engineers to work on developer tooling and React SDKs.
+
+We have open positions in New York and Remote. We offer great equity, transparent culture, and high autonomy. Reach out if you're interested in joining! #hiring</div>
+        <div class="social-counts">
+          <span>👍 319</span>
+          <span>44 comments · 19 reposts</span>
+        </div>
+        <div class="social-actions-bar">
+          <button class="action-btn" aria-label="Like">👍 Like</button>
+          <button class="action-btn" aria-label="Comment">💬 Comment</button>
+          <button class="action-btn" aria-label="Repost">🔁 Repost</button>
+          <button class="action-btn" aria-label="Send">✈️ Send</button>
+        </div>
+      </article>
+
+      <!-- Post 6: Authentic Technical Question -->
+      <article class="feed-shared-update-v2" id="post-real-2" data-urn="urn:li:activity:106">
+        <div class="author-header">
+          <div class="author-avatar" style="background:#ede7f6; color:#4a148c;">SK</div>
+          <div>
+            <div class="author-name">Sam Kim · 2nd</div>
+            <div class="author-sub">Frontend Engineer · 5h · 🌐</div>
+          </div>
+        </div>
+        <div class="post-text">Has anyone measured MutationObserver callback overhead on a feed with more than 500 dynamic DOM nodes?
+
+I am seeing a 14 ms median callback on Chrome 128 and would love to compare profiling notes with anyone optimizing infinite lists.</div>
+        <div class="social-counts">
+          <span>👍 76</span>
+          <span>19 comments · 3 reposts</span>
+        </div>
+        <div class="social-actions-bar">
+          <button class="action-btn" aria-label="Like">👍 Like</button>
+          <button class="action-btn" aria-label="Comment">💬 Comment</button>
+          <button class="action-btn" aria-label="Repost">🔁 Repost</button>
+          <button class="action-btn" aria-label="Send">✈️ Send</button>
+        </div>
+      </article>
+    </main>
+
+    <!-- Right Column -->
+    <aside>
+      <div class="news-card">
+        <div class="news-header">LinkedIn News</div>
+        <div class="news-item">The remote work debate heats up<div class="news-meta">1h ago · 6,520 readers</div></div>
+        <div class="news-item">AI spending hits record high in tech<div class="news-meta">2h ago · 4,112 readers</div></div>
+        <div class="news-item">OpenAI releases new lightweight models<div class="news-meta">3h ago · 8,901 readers</div></div>
+      </div>
+    </aside>
+  </div>
+
+  <!-- Floating Draggable Slop Filter Indicator -->
+  <div id="slop-filter-indicator">
+    <span class="slop-drag-handle" title="Drag to reposition">⠿</span>
+    <span id="slop-status-text">🛡️ Slop Filter: 6 scanned · 2 faded</span>
+    <span class="slop-divider"></span>
+    <span id="slop-hiring-cluster" class="slop-hiring-cluster">
+      <button id="slop-hiring-trigger" class="slop-hiring-btn" title="Jump to next hiring post">💼 Hiring (2)</button>
+      <button id="slop-prev-hiring" class="slop-nav-btn" title="Previous hiring post">◀</button>
+      <button id="slop-next-hiring" class="slop-nav-btn" title="Next hiring post">▶</button>
+    </span>
+  </div>
+
+  <script>
+    // Progressive Demo Simulation Script
+    const posts = [
+      { id: "post-real-1", type: "clean", label: "✓ 4% slop", cls: "slop-box-clean", badgeCls: "jev-badge-clean", delay: 400 },
+      { id: "post-slop-1", type: "slop", label: "⚠️ 89% slop", cls: "slop-box-slop jev-slop-faded", badgeCls: "jev-badge-slop", delay: 900 },
+      { id: "post-hiring-1", type: "hiring", label: "💼 Hiring", cls: "slop-box-hiring", badgeCls: "jev-badge-hiring", delay: 1400 },
+      { id: "post-ad-1", type: "ad", label: "📢 94% ad", cls: "slop-box-slop jev-slop-faded", badgeCls: "jev-badge-slop", delay: 1900 },
+      { id: "post-hiring-2", type: "hiring", label: "💼 Hiring", cls: "slop-box-hiring", badgeCls: "jev-badge-hiring", delay: 2400 },
+      { id: "post-real-2", type: "clean", label: "✓ 0% slop", cls: "slop-box-clean", badgeCls: "jev-badge-clean", delay: 2800 },
+    ];
+
+    // Set initial scanning states
+    posts.forEach(p => {
+      const el = document.getElementById(p.id);
+      if (!el) return;
+      el.classList.add("slop-box-scanning");
+      const b = document.createElement("span");
+      b.className = "jev-badge jev-badge-pending";
+      b.innerHTML = '<span class="slop-spinner"></span> classifying…';
+      el.appendChild(b);
+
+      setTimeout(() => {
+        el.classList.remove("slop-box-scanning");
+        b.remove();
+        p.cls.split(" ").forEach(c => el.classList.add(c));
+        const resBadge = document.createElement("span");
+        resBadge.className = `jev-badge ${p.badgeCls}`;
+        resBadge.innerHTML = p.label;
+        el.appendChild(resBadge);
+      }, p.delay);
+    });
+
+    // Hiring Navigation
+    const hiringIds = ["post-hiring-1", "post-hiring-2"];
+    let hiringIdx = -1;
+
+    function jumpHiring(delta) {
+      hiringIdx = (hiringIdx + delta + hiringIds.length) % hiringIds.length;
+      const target = document.getElementById(hiringIds[hiringIdx]);
+      if (target) {
+        target.scrollIntoView({ behavior: "smooth", block: "center" });
+        target.classList.remove("slop-hiring-pulse");
+        void target.offsetWidth;
+        target.classList.add("slop-hiring-pulse");
+      }
+      document.getElementById("slop-hiring-trigger").textContent = `💼 Hiring: ${hiringIdx + 1}/${hiringIds.length}`;
+    }
+
+    document.getElementById("slop-hiring-trigger").addEventListener("click", () => jumpHiring(1));
+    document.getElementById("slop-next-hiring").addEventListener("click", () => jumpHiring(1));
+    document.getElementById("slop-prev-hiring").addEventListener("click", () => jumpHiring(-1));
+
+    // Dragging Logic
+    const pill = document.getElementById("slop-filter-indicator");
+    let isDragging = false, startX, startY, initLeft, initTop;
+
+    pill.addEventListener("pointerdown", e => {
+      if (e.target.closest("button")) return;
+      isDragging = true;
+      startX = e.clientX;
+      startY = e.clientY;
+      const r = pill.getBoundingClientRect();
+      initLeft = r.left;
+      initTop = r.top;
+      pill.setPointerCapture(e.pointerId);
+      pill.classList.add("slop-dragging");
+    });
+
+    pill.addEventListener("pointermove", e => {
+      if (!isDragging) return;
+      pill.style.left = `${Math.max(10, Math.min(window.innerWidth - pill.offsetWidth - 10, initLeft + e.clientX - startX))}px`;
+      pill.style.top = `${Math.max(10, Math.min(window.innerHeight - pill.offsetHeight - 10, initTop + e.clientY - startY))}px`;
+      pill.style.bottom = "auto";
+      pill.style.right = "auto";
+    });
+
+    const endDrag = e => {
+      if (!isDragging) return;
+      isDragging = false;
+      pill.classList.remove("slop-dragging");
+      try { pill.releasePointerCapture(e.pointerId); } catch(err) {}
+    };
+    pill.addEventListener("pointerup", endDrag);
+    pill.addEventListener("pointercancel", endDrag);
+  </script>
 </body>
 </html>

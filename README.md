@@ -2,6 +2,8 @@
 
 A Chrome extension that watches your LinkedIn feed and fades posts that are likely AI-generated filler, thought-leader platitudes, or ads.
 
+![LinkedIn Slop Filter Demo](assets/demo.webp)
+
 ## How it works
 
 Posts are batched as they load, sent to a classifier, and scored 0–1 for *slop* and *ad*. Posts above your threshold are faded to 10% opacity. Hover any faded post to reveal it.
