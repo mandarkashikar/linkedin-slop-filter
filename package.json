@@ -1,0 +1,24 @@
+{
+  "name": "linkedin-slop-filter",
+  "version": "1.0.0",
+  "description": "A Chrome extension that watches LinkedIn, Substack, and X/Twitter feeds and fades posts that are likely AI-generated filler, thought-leader platitudes, or ads.",
+  "main": "background.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/mandarkashikar/linkedin-slop-filter.git"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "type": "commonjs",
+  "bugs": {
+    "url": "https://github.com/mandarkashikar/linkedin-slop-filter/issues"
+  },
+  "homepage": "https://github.com/mandarkashikar/linkedin-slop-filter#readme",
+  "dependencies": {
+    "jsdom": "^30.1.1"
+  }
+}
