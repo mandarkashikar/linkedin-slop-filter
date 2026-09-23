@@ -23,7 +23,7 @@ Two classifier backends are supported:
 ## Use with Ollama (local, private)
 
 1. [Install Ollama](https://ollama.com) if you haven't already.
-2. Pull a model: `ollama pull gemma4` (or `llama3.2`, `mistral`, etc.)
+2. Pull a model: `ollama pull llama3.2` (or `mistral`, `gemma2:2b`, etc.)
 3. Allow Chrome extensions to call Ollama:
 
    ```bash
@@ -44,7 +44,7 @@ Two classifier backends are supported:
 
 ## Run the local demo
 
-With Ollama running and `gemma4` installed:
+With Ollama running and `llama3.2` installed:
 
 ```bash
 python3 -m http.server 8765 --directory demo
