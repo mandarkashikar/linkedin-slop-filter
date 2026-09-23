@@ -33,6 +33,18 @@ async function classifyPosts(posts) {
   return classifyJev(posts, apiKey, threshold);
 }
 
+// --- Position detection helper ---------------------------------------------
+
+const POSITION_REGEX = /\b(?:software|frontend|front-end|backend|back-end|fullstack|full-stack|mobile|ios|android|ml|ai|machine learning|data|systems?|infrastructure|platform|cloud|security|devops|sre|qa|test|product|program|project|engineering|design|ui|ux|brand|sales|account|marketing|growth|content|talent|people|hr|finance|operations|bizops|legal)\s*(?:engineer(?:ing|s)?|developer(?:s)?|manager(?:s)?|pm|lead(?:s)?|director(?:s)?|vp|head|architect(?:s)?|designer(?:s)?|scientist(?:s)?|analyst(?:s)?|executive(?:s)?|specialist(?:s)?|recruiter(?:s)?|intern(?:s)?|associate(?:s)?|consultant(?:s)?)\b|\b(?:software engineer|product manager|data scientist|account executive|engineering manager|solution architect|product designer|cto|cpo|vp of engineering)\b/i;
+
+const HIRING_INTENT_REGEX = /\b(?:we(?:'re| are)|\bi(?:'m| am)|my team is|our team is)\s+(?:hiring|recruiting|looking for)\b|\bjoin (?:our|my) team as\b|\bopen role(?:s)?\b|\bjob opening(?:s)?\b|\bwe have open position(?:s)?\b/i;
+
+function hasSpecificJobPosition(text) {
+  if (!text) return false;
+  return (HIRING_INTENT_REGEX.test(text) && POSITION_REGEX.test(text)) ||
+         /\b(?:open roles?|open positions?|hiring for)\s*[:\-]\s*[A-Za-z]/i.test(text);
+}
+
 // --- Jev (TypeSafe AI) -------------------------------------------------------
 
 async function classifyJev(posts, apiKey, threshold) {
@@ -59,7 +71,7 @@ async function classifyJev(posts, apiKey, threshold) {
               },
               is_hiring: {
                 type: "noul",
-                instructions: "This post is announcing a job vacancy, team recruitment, or hiring for an open role"
+                instructions: "This post is actively announcing an open job vacancy for a specific position, role, or job title being recruited for (not generic advice or commentary about hiring)"
               }
             }
           })
@@ -75,12 +87,15 @@ async function classifyJev(posts, apiKey, threshold) {
         const ad   = data.answers.is_ad?.noul ?? 0;
         let hiring = data.answers.is_hiring?.noul ?? 0;
 
-        const hiringRegex = /\b(?:we(?:'re| are)|\bi(?:'m| am)|my team is|our team is)\s+(?:hiring|recruiting|looking for)\b|#hiring\b|\bopen role(?:s)?\b|\bjob opening(?:s)?\b/i;
-        if (hiringRegex.test(text)) {
+        const hasPosition = hasSpecificJobPosition(text);
+        if (hasPosition) {
           hiring = Math.max(hiring, 0.85);
+        } else if (!hasPosition && hiring > 0.3) {
+          // If no specific position is mentioned, cap hiring score so generic commentary/advice isn't misclassified
+          hiring = Math.min(hiring, 0.2);
         }
 
-        const isHiring = hiring >= 0.55 && hiring >= slop && hiring >= ad;
+        const isHiring = hiring >= 0.6 && hasPosition && hiring >= slop && hiring >= ad;
         const noul = isHiring ? 0 : Math.max(slop, ad);
 
         return { id, noul, slop, ad, hiring, is_hiring: isHiring };
@@ -99,12 +114,13 @@ const OLLAMA_PROMPT = (text) => `You are an expert LinkedIn feed curator. Analyz
 
 1. "hiring" (0.0 to 1.0):
 - HIGH (0.7–1.0):
-  * The author or company is recruiting, hiring, or sharing open roles/vacancies ("We're hiring", "Looking for a PM to join our team", "My team has an open role", "Apply at link", "Hiring engineers in Toronto").
-  * Sharing referral opportunities or recruiting for teams.
+  * The author or company is actively recruiting for a SPECIFIC job position, role, or title being filled (e.g. "We are hiring a Senior Product Manager", "Looking for a Frontend Engineer", "Open role: Data Scientist", "Opening for Product Designer").
+  * MUST name an actual job position, title, or open role being filled.
 - LOW (0.0–0.2):
-  * Not recruiting or hiring. (Note: A job seeker saying "I am looking for a job" is NOT hiring).
+  * Posts containing the word "hiring" or "#hiring" that do NOT name an actual open job position (e.g. career advice, "Why hiring is broken", "5 tips for hiring", commentary on job market trends, or vague announcements like "We are hiring soon").
+  * Job seekers asking for work ("I'm looking for a job").
 
-CRITICAL RULE: If a post is announcing a job opportunity or recruitment, it is a legitimate career opportunity. You MUST rate "hiring" HIGH (0.7–1.0) and "slop" and "ad" LOW (0.0–0.2). Do NOT classify hiring as a commercial ad!
+CRITICAL RULE: If and only if the post specifies an actual open job position or title being recruited for, rate "hiring" HIGH (0.7–1.0) and "slop" and "ad" LOW (0.0–0.2). If it merely discusses hiring or uses #hiring as a topic without an actual job opening, rate "hiring": 0.0!
 
 2. "slop" (0.0 to 1.0):
 - HIGH (0.7–1.0):
@@ -112,15 +128,16 @@ CRITICAL RULE: If a post is announcing a job opportunity or recruitment, it is a
   * Empty thought-leader platitudes and generic motivational quotes ("Mindset is everything", "I woke up at 5 AM...").
   * Engagement bait ("Agree?", "Thoughts?", "Drop an emoji below").
   * Generic superficial lists ("Top 10 AI tools you must know 🚀") without original depth.
+  * Generic commentary about hiring or job hunting without real depth.
 - LOW (0.0–0.2):
-  * Authentic career milestones, engineering case studies, post-mortems, and team hiring announcements.
+  * Authentic career milestones, concrete engineering case studies, post-mortems, and specific job openings.
 
 3. "ad" (0.0 to 1.0):
 - HIGH (0.7–1.0):
   * Explicit sponsored advertising, paid promotional campaigns, commercial product sales pitches ("Book a demo today", "Use promo code", "Buy our course now").
   * Commercial lead generation funnels.
 - LOW (0.0–0.2):
-  * Legitimate team hiring announcements (job openings are NOT commercial ads!).
+  * Specific team job postings (open roles are NOT commercial product ads!).
   * Organic founder updates or engineering articles.
 
 4. "ui_noise": If the text appears to be UI navigation buttons, creation prompts (e.g. "Start a post", "Video Photo Write article"), or empty noise, return {"slop": 0.0, "ad": 0.0, "hiring": 0.0}.
@@ -183,13 +200,15 @@ async function classifyOllama(posts, threshold, model) {
         const ad   = clamp(parsed.ad   ?? 0);
         let hiring = clamp(parsed.hiring ?? 0);
 
-        // Fast keyword heuristic to reliably detect explicit hiring phrases
-        const hiringRegex = /\b(?:we(?:'re| are)|\bi(?:'m| am)|my team is|our team is)\s+(?:hiring|recruiting|looking for)\b|#hiring\b|\bopen role(?:s)?\b|\bjob opening(?:s)?\b/i;
-        if (hiringRegex.test(text)) {
+        const hasPosition = hasSpecificJobPosition(text);
+        if (hasPosition) {
           hiring = Math.max(hiring, 0.85);
+        } else if (!hasPosition && hiring > 0.3) {
+          // If no specific position is mentioned, cap hiring score so generic commentary/advice isn't misclassified
+          hiring = Math.min(hiring, 0.2);
         }
 
-        const isHiring = hiring >= 0.55 && hiring >= slop && hiring >= ad;
+        const isHiring = hiring >= 0.6 && hasPosition && hiring >= slop && hiring >= ad;
         const noul = isHiring ? 0 : Math.max(slop, ad);
 
         return { id, noul, slop, ad, hiring, is_hiring: isHiring };

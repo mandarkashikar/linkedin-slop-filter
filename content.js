@@ -621,6 +621,16 @@ function extractText(post) {
   return null;
 }
 
+const POSITION_REGEX = /\b(?:software|frontend|front-end|backend|back-end|fullstack|full-stack|mobile|ios|android|ml|ai|machine learning|data|systems?|infrastructure|platform|cloud|security|devops|sre|qa|test|product|program|project|engineering|design|ui|ux|brand|sales|account|marketing|growth|content|talent|people|hr|finance|operations|bizops|legal)\s*(?:engineer(?:ing|s)?|developer(?:s)?|manager(?:s)?|pm|lead(?:s)?|director(?:s)?|vp|head|architect(?:s)?|designer(?:s)?|scientist(?:s)?|analyst(?:s)?|executive(?:s)?|specialist(?:s)?|recruiter(?:s)?|intern(?:s)?|associate(?:s)?|consultant(?:s)?)\b|\b(?:software engineer|product manager|data scientist|account executive|engineering manager|solution architect|product designer|cto|cpo|vp of engineering)\b/i;
+
+const HIRING_INTENT_REGEX = /\b(?:we(?:'re| are)|\bi(?:'m| am)|my team is|our team is)\s+(?:hiring|recruiting|looking for)\b|\bjoin (?:our|my) team as\b|\bopen role(?:s)?\b|\bjob opening(?:s)?\b|\bwe have open position(?:s)?\b/i;
+
+function hasSpecificJobPosition(text) {
+  if (!text) return false;
+  return (HIRING_INTENT_REGEX.test(text) && POSITION_REGEX.test(text)) ||
+         /\b(?:open roles?|open positions?|hiring for)\s*[:\-]\s*[A-Za-z]/i.test(text);
+}
+
 function postId(post) {
   return (
     post.getAttribute("data-urn") ||
@@ -734,11 +744,11 @@ function flush() {
           continue;
         }
 
-        const textHasHiringKeywords = /\b(?:we(?:'re| are)|\bi(?:'m| am)|my team is|our team is)\s+(?:hiring|recruiting|looking for)\b|#hiring\b|\bopen role(?:s)?\b|\bjob opening(?:s)?\b|\bwe have open position(?:s)?\b/i.test(item.text);
-        const isHiring = result.is_hiring || (result.hiring >= 0.55 && result.hiring >= (result.slop ?? 0) && result.hiring >= (result.ad ?? 0)) || textHasHiringKeywords;
+        const hasPosition = hasSpecificJobPosition(item.text);
+        const isHiring = Boolean(result.is_hiring && hasPosition);
         const score = isHiring ? 0 : (result.noul ?? 0);
         const pct = Math.round(score * 100);
-        console.log(`[LinkedIn Slop Filter] Post ${result.id} -> slop=${result.slop}, ad=${result.ad}, hiring=${result.hiring}, isHiring=${isHiring}`);
+        console.log(`[LinkedIn Slop Filter] Post ${result.id} -> slop=${result.slop}, ad=${result.ad}, hiring=${result.hiring}, hasPosition=${hasPosition}, isHiring=${isHiring}`);
 
         // Transition progress icon to %slop / Hiring and update square outline
         if (isHiring) {
