@@ -51,26 +51,29 @@ style.textContent = `
     margin-right: 5px;
   }
   .slop-box-scanning {
+    position: relative !important;
     outline: 3px dashed #0a66c2 !important;
     outline-offset: -2px !important;
     border-radius: 8px !important;
-    transition: outline 0.3s ease !important;
+    transition: outline 0.2s ease !important;
   }
   .slop-box-slop {
+    position: relative !important;
     outline: 3px dashed #d93025 !important;
     outline-offset: -2px !important;
     border-radius: 8px !important;
   }
   .slop-box-clean {
+    position: relative !important;
     outline: 2px solid rgba(39, 174, 96, 0.7) !important;
     outline-offset: -2px !important;
     border-radius: 8px !important;
-    transition: outline 0.5s ease !important;
+    transition: outline 0.3s ease !important;
   }
   .jev-slop-faded {
     opacity: 0.18 !important;
     filter: grayscale(60%) !important;
-    transition: opacity 0.3s ease, filter 0.3s ease !important;
+    transition: opacity 0.25s ease, filter 0.25s ease !important;
   }
   .jev-slop-faded:hover {
     opacity: 1 !important;
@@ -131,7 +134,7 @@ function updateIndicator(msg, status = "active") {
   }
 }
 
-updateIndicator("Slop Filter: scanning feed...");
+updateIndicator("Slop Filter: Active");
 
 // --- Settings --------------------------------------------------------------
 
@@ -159,10 +162,10 @@ chrome.storage.onChanged.addListener(changes => {
 // --- DOM helpers -----------------------------------------------------------
 
 function findPosts(root = document) {
+  if (document.hidden) return [];
   const posts = new Set();
 
   // 1. Structural search via action buttons (Like, Comment, Repost)
-  // Every post on LinkedIn contains reaction/action buttons
   try {
     const likeButtons = root.querySelectorAll("button[aria-label*='Like' i], button[aria-label*='React' i], button[aria-label*='Comment' i]");
     for (const btn of likeButtons) {
@@ -177,7 +180,6 @@ function findPosts(root = document) {
           posts.add(p);
           break;
         }
-        // If parent has card dimensions and contains author header/follow button
         if (p.offsetHeight >= 120 && p.offsetHeight <= 2500 && p.offsetWidth >= 250 && p.querySelector("button[aria-label*='Follow' i], [data-view-name*='actor'], .feed-shared-actor, .update-components-actor")) {
           posts.add(p);
           break;
@@ -203,10 +205,8 @@ function findPosts(root = document) {
   } catch (e) {}
 
   // Deduplication:
-  // If element A contains element B, element A is a wrapper/feed container. Keep only B (the actual post card).
   const rawList = Array.from(posts);
   const filtered = rawList.filter(el => {
-    // If el contains another card in rawList, el is an outer wrapper, discard it
     for (const other of rawList) {
       if (other !== el && el.contains(other)) {
         return false;
@@ -227,7 +227,7 @@ function findPosts(root = document) {
       return false;
     }
 
-    // 2. Exclude recommendation carousels / side modules / jobs
+    // 2. Exclude recommendation carousels / side modules / jobs / sentinel
     if (
       el.querySelector("[data-view-name*='job-card'], .feed-shared-news-module") ||
       el.innerText?.includes("Jobs recommended for you") ||
@@ -237,7 +237,7 @@ function findPosts(root = document) {
       return false;
     }
 
-    // 3. Legitimate post verification: Must have interaction buttons (Like, React, Comment, Repost)
+    // 3. Legitimate post verification: Must have social interaction buttons (Like, React, Comment, Repost)
     const hasInteraction = el.querySelector(
       "button[aria-label*='Like' i], button[aria-label*='React' i], button[aria-label*='Comment' i], .feed-shared-social-action-bar, .social-details-social-actions"
     );
@@ -309,13 +309,6 @@ function postId(post) {
   );
 }
 
-function ensureRelative(el) {
-  const comp = getComputedStyle(el);
-  if (comp.position === "static") {
-    el.style.position = "relative";
-  }
-}
-
 function setBadge(post, id, text, cls) {
   removeBadge(post, id);
   const b = document.createElement("span");
@@ -329,10 +322,11 @@ function removeBadge(post, id) {
   post.querySelector(`[data-badge-id="${id}"]`)?.remove();
 }
 
-// --- Queue & batching ------------------------------------------------------
+// --- Queue & sequential batching -------------------------------------------
 
 const queue = [];
 let flushTimer = null;
+let isFlushing = false;
 
 function enqueue(post) {
   if (!ENABLED) return;
@@ -345,9 +339,8 @@ function enqueue(post) {
 
   const id = postId(post) || `gen-${Math.random().toString(36).slice(2)}`;
   post.setAttribute(CHECKED_ATTR, id);
-  ensureRelative(post);
 
-  // 1. Draw square around the fetched box
+  // 1. Draw square around the fetched box (position: relative is handled via CSS class, no JS reflow)
   post.classList.add("slop-box-scanning");
 
   // 2. Add progress icon on top right: classifying...
@@ -360,33 +353,42 @@ function enqueue(post) {
 }
 
 function scheduleFlush() {
-  if (flushTimer) return;
-  flushTimer = setTimeout(flush, 400);
+  if (flushTimer || isFlushing) return;
+  flushTimer = setTimeout(flush, 300);
 }
 
 function flush() {
   flushTimer = null;
-  if (!queue.length) return;
+  if (isFlushing || !queue.length) return;
+  isFlushing = true;
 
-  // Process in batches of 2 for immediate feedback
+  // Process in small batches of 2 sequentially to avoid CPU/connection contention
   const batch = queue.splice(0, 2);
-  console.log(`[LinkedIn Slop Filter] Sending batch of ${batch.length} posts to background worker...`);
+  console.log(`[LinkedIn Slop Filter] Classifying batch of ${batch.length} posts...`);
 
   chrome.runtime.sendMessage(
     { type: "classify", posts: batch.map(p => ({ id: p.id, text: p.text })) },
     resp => {
+      isFlushing = false;
+
       if (chrome.runtime.lastError) {
         console.error("[LinkedIn Slop Filter] Background message error:", chrome.runtime.lastError.message);
-        return cleanup(batch);
+        cleanup(batch);
+        if (queue.length) scheduleFlush();
+        return;
       }
       if (!resp) {
         console.warn("[LinkedIn Slop Filter] Empty response from background worker");
-        return cleanup(batch);
+        cleanup(batch);
+        if (queue.length) scheduleFlush();
+        return;
       }
       if (resp.error) {
         console.error("[LinkedIn Slop Filter] Backend returned error:", resp.error);
         updateIndicator("Slop Filter: Backend Error", "error");
-        return cleanup(batch);
+        cleanup(batch);
+        if (queue.length) scheduleFlush();
+        return;
       }
 
       const threshold = resp.threshold ?? THRESHOLD;
@@ -421,10 +423,15 @@ function flush() {
           setBadge(item.el, item.id, `✓ ${pct}% slop`, "jev-badge-clean");
         }
       }
+
+      updateIndicator(`Slop Filter: ${scannedCount} scanned · ${fadedCount} faded`);
+
+      // If more posts are queued, continue sequentially
+      if (queue.length) {
+        scheduleFlush();
+      }
     }
   );
-
-  if (queue.length) scheduleFlush();
 }
 
 function cleanup(batch) {
@@ -434,7 +441,7 @@ function cleanup(batch) {
   });
 }
 
-// --- Scanning & Observers --------------------------------------------------
+// --- High-Performance Scrolling & Scanning ---------------------------------
 
 function scanDOM() {
   const posts = findPosts();
@@ -447,5 +454,21 @@ function scanDOM() {
 // Initial scan
 scanDOM();
 
-// Periodic scan every 1.2 seconds (smooth and decoupled)
-setInterval(scanDOM, 1200);
+// Passive, debounced scroll listener:
+// Never executes heavy DOM logic while the user is actively scrolling!
+let scrollDebounce = null;
+window.addEventListener(
+  "scroll",
+  () => {
+    if (scrollDebounce) clearTimeout(scrollDebounce);
+    scrollDebounce = setTimeout(scanDOM, 350);
+  },
+  { passive: true }
+);
+
+// Fallback idle scan every 3 seconds (smooth and non-intrusive)
+setInterval(() => {
+  if (!scrollDebounce) {
+    scanDOM();
+  }
+}, 3000);
