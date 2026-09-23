@@ -1,6 +1,6 @@
-# LinkedIn Slop Filter
+# Feed Slop Filter
 
-A Chrome extension that watches your LinkedIn feed and fades posts that are likely AI-generated filler, thought-leader platitudes, or ads.
+A Chrome extension that watches LinkedIn, Substack, and X/Twitter feeds and fades posts that are likely AI-generated filler, thought-leader platitudes, or ads.
 
 [![LinkedIn Slop Filter live demo](assets/demo-inline.gif)](assets/demo.mp4)
 
@@ -40,7 +40,7 @@ Two classifier backends are supported:
 
 4. Quit and reopen the Ollama macOS app so it picks up the setting.
 5. Open the extension popup, set Backend to **Local Ollama**, enter the model name, save.
-6. Visit LinkedIn and scroll the feed — posts start getting scored immediately.
+6. Visit LinkedIn, Substack, or X/Twitter and scroll the feed — posts start getting scored immediately.
 
 > Ollama must be running on `localhost:11434`. The extension calls it directly from the service worker.
 > Ollama blocks browser-extension origins by default; `OLLAMA_ORIGINS` is required for local Chrome-extension access.
@@ -67,7 +67,15 @@ Then open <http://127.0.0.1:8765/>. The extension classifies four sample posts l
 - **Slop threshold** — 40%–95%. Posts scoring above this are faded. Higher = stricter.
 - **On/Off toggle** — disable filtering without uninstalling.
 
-## UI & Features (v1.1.0)
+## Supported sites
+
+- **LinkedIn** — feed posts, ads, and LinkedIn-only hiring detection/navigation.
+- **Substack** — post previews across feeds, inboxes, and archive pages.
+- **X/Twitter** — tweet cards in the virtualized home timeline, including newly loaded tweets while scrolling.
+
+Chrome may ask you to approve access for the newly added Substack and X/Twitter domains after updating the unpacked extension.
+
+## UI & Features (v1.3.0)
 
 - **Draggable Floating Pill**: Reposition the pill anywhere on screen by dragging it; position persists across reloads via `localStorage`.
 - **Hiring Post Detection & Navigation**:
@@ -77,11 +85,11 @@ Then open <http://127.0.0.1:8765/>. The extension classifies four sample posts l
 - **Scanning Square**: Blue dashed bounding box with animated spinner badge (`🔄 classifying…`) on newly visible posts.
 - **Clean Posts**: Solid green bounding box (`✓ X% slop`) indicating legitimate, non-slop content.
 - **Slop / Ads**: Red dashed bounding box (`⚠️ X% slop` or `📢 X% ad`) and faded card opacity (hover to reveal).
-- **Infinite Scroll**: Preserves LinkedIn's feed scrolling continuity and handles dynamic lazy loading.
+- **Infinite Scroll**: Handles dynamic and virtualized feeds as new posts enter the page.
 - **Excluded Widgets**: "Start a post" creation box, news widgets, puzzle blocks, and recommendation sidebars remain completely unaffected.
 
 ## Status
 
-**v1.1.0**: Post detection, draggable UI, hiring classification, and feed navigation are active.
+**v1.3.0**: Multi-site filtering is active on LinkedIn, Substack, and X/Twitter. Hiring classification and navigation remain LinkedIn-only.
 
 Research and architecture notes: [APPROACH.md](APPROACH.md)

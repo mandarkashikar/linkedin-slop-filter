@@ -66,7 +66,7 @@ $("save").addEventListener("click", () => {
       st.textContent = "Add a Jev API key to activate filtering.";
       st.className = "status err";
     } else {
-      st.textContent = "Saved — reload LinkedIn to apply.";
+      st.textContent = "Saved — reload the feed to apply.";
       st.className = "status ok";
     }
     setTimeout(() => { st.textContent = ""; st.className = "status"; }, 3000);

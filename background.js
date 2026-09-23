@@ -3,7 +3,7 @@
 
 chrome.runtime.onMessage.addListener((msg, _sender, sendResponse) => {
   if (msg.type === "classify") {
-    classifyPosts(msg.posts)
+    classifyPosts(msg.posts, msg.site)
       .then(resp => sendResponse(resp))
       .catch(err => {
         console.error("[Slop Filter Background] Error classifying posts:", err);
@@ -13,7 +13,7 @@ chrome.runtime.onMessage.addListener((msg, _sender, sendResponse) => {
   }
 });
 
-async function classifyPosts(posts) {
+async function classifyPosts(posts, site = "generic") {
   let { apiKey, threshold, backend, ollamaModel } = await chrome.storage.sync.get({
     apiKey: "",
     threshold: 0.75,
@@ -26,11 +26,11 @@ async function classifyPosts(posts) {
   }
 
   if (backend === "ollama") {
-    return classifyOllama(posts, threshold, ollamaModel);
+    return classifyOllama(posts, threshold, ollamaModel, site);
   }
 
   if (!apiKey) return { error: "no_api_key" };
-  return classifyJev(posts, apiKey, threshold);
+  return classifyJev(posts, apiKey, threshold, site);
 }
 
 // --- Position detection helper ---------------------------------------------
@@ -47,7 +47,7 @@ function hasSpecificJobPosition(text) {
 
 // --- Jev (TypeSafe AI) -------------------------------------------------------
 
-async function classifyJev(posts, apiKey, threshold) {
+async function classifyJev(posts, apiKey, threshold, site) {
   const results = await Promise.all(
     posts.map(async ({ id, text }) => {
       try {
@@ -87,7 +87,7 @@ async function classifyJev(posts, apiKey, threshold) {
         const ad   = data.answers.is_ad?.noul ?? 0;
         let hiring = data.answers.is_hiring?.noul ?? 0;
 
-        const hasPosition = hasSpecificJobPosition(text);
+        const hasPosition = site === "linkedin" && hasSpecificJobPosition(text);
         if (hasPosition) {
           hiring = Math.max(hiring, 0.85);
         } else if (!hasPosition && hiring > 0.3) {
@@ -110,7 +110,7 @@ async function classifyJev(posts, apiKey, threshold) {
 
 // --- Ollama ------------------------------------------------------------------
 
-const OLLAMA_PROMPT = (text) => `You are an expert LinkedIn feed curator. Analyze the post text below and rate it on three scales from 0.0 to 1.0:
+const OLLAMA_PROMPT = (text, site) => `You are an expert curator for ${site === "twitter" ? "X/Twitter" : site === "substack" ? "Substack" : site === "linkedin" ? "LinkedIn" : "a social/news feed"}. Analyze the post text below and rate it on three scales from 0.0 to 1.0:
 
 1. "hiring" (0.0 to 1.0):
 - HIGH (0.7–1.0):
@@ -169,7 +169,7 @@ async function getAvailableOllamaModel(preferredModel) {
   return preferredModel;
 }
 
-async function classifyOllama(posts, threshold, model) {
+async function classifyOllama(posts, threshold, model, site) {
   const actualModel = await getAvailableOllamaModel(model || "llama3.2");
   console.log(`[Slop Filter] Classifying ${posts.length} post(s) using Ollama (${actualModel})...`);
 
@@ -181,7 +181,7 @@ async function classifyOllama(posts, threshold, model) {
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
             model: actualModel,
-            prompt: OLLAMA_PROMPT(text),
+            prompt: OLLAMA_PROMPT(text, site),
             stream: false,
             format: "json"
           })
@@ -200,7 +200,7 @@ async function classifyOllama(posts, threshold, model) {
         const ad   = clamp(parsed.ad   ?? 0);
         let hiring = clamp(parsed.hiring ?? 0);
 
-        const hasPosition = hasSpecificJobPosition(text);
+        const hasPosition = site === "linkedin" && hasSpecificJobPosition(text);
         if (hasPosition) {
           hiring = Math.max(hiring, 0.85);
         } else if (!hasPosition && hiring > 0.3) {
@@ -247,4 +247,3 @@ function safeParseJson(raw) {
 function clamp(v) {
   return Math.min(1, Math.max(0, parseFloat(v) || 0));
 }
-

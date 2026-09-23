@@ -1,13 +1,17 @@
 {
   "manifest_version": 3,
   "name": "Feed Slop Filter",
-  "version": "1.2.0",
-  "description": "Auto-fades AI slop and ads on LinkedIn, Substack, and more using Jev or a local Ollama model",
+  "version": "1.3.0",
+  "description": "Auto-fades AI slop and ads on LinkedIn, Substack, and X/Twitter using Jev or a local Ollama model",
   "permissions": ["storage"],
   "host_permissions": [
     "*://*.linkedin.com/*",
     "*://linkedin.com/*",
     "*://*.substack.com/*",
+    "*://x.com/*",
+    "*://*.x.com/*",
+    "*://twitter.com/*",
+    "*://*.twitter.com/*",
     "https://api.typesafe.ai/*",
     "http://localhost:11434/*",
     "http://127.0.0.1:11434/*"
@@ -18,6 +22,10 @@
         "*://*.linkedin.com/*",
         "*://linkedin.com/*",
         "*://*.substack.com/*",
+        "*://x.com/*",
+        "*://*.x.com/*",
+        "*://twitter.com/*",
+        "*://*.twitter.com/*",
         "http://127.0.0.1:8765/*",
         "http://localhost:8765/*"
       ],
@@ -30,6 +38,6 @@
   },
   "action": {
     "default_popup": "popup.html",
-    "default_title": "LinkedIn Slop Filter"
+    "default_title": "Feed Slop Filter"
   }
 }

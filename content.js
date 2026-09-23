@@ -1,6 +1,6 @@
 // Feed Slop Filter — content script
 // Watches the feed, extracts post text, asks classifier, fades slop.
-// Supports: LinkedIn, Substack
+// Supports: LinkedIn, Substack, X/Twitter
 
 const CHECKED_ATTR = "data-slop-checked";
 const FADE_CLASS   = "jev-slop-faded";
@@ -9,6 +9,9 @@ const CURRENT_SITE = (() => {
   const h = window.location.hostname;
   if (h.includes("linkedin.com")) return "linkedin";
   if (h.includes("substack.com")) return "substack";
+  if (h === "x.com" || h.endsWith(".x.com") || h === "twitter.com" || h.endsWith(".twitter.com")) {
+    return "twitter";
+  }
   return "generic";
 })();
 
@@ -571,7 +574,20 @@ function findPosts(root = document) {
     });
   } catch (e) {}
 
-  // Strategy 3: Substack post cards (feed, inbox, archive pages)
+  // Strategy 3: X/Twitter tweet cards. X virtualizes the timeline, so these
+  // containers are added and removed continuously as the user scrolls.
+  if (CURRENT_SITE === "twitter") {
+    try {
+      root.querySelectorAll("article[data-testid='tweet']").forEach(el => {
+        const tweetText = el.querySelector("[data-testid='tweetText']")?.textContent?.trim() || "";
+        if (el.offsetHeight >= 80 && tweetText.length > 15) {
+          posts.add(el);
+        }
+      });
+    } catch (e) {}
+  }
+
+  // Strategy 4: Substack post cards (feed, inbox, archive pages)
   if (CURRENT_SITE === "substack") {
     try {
       root.querySelectorAll(
@@ -584,7 +600,7 @@ function findPosts(root = document) {
     } catch (e) {}
   }
 
-  // Strategy 4: Generic <article> fallback for any other site
+  // Strategy 5: Generic <article> fallback for any other site
   if (CURRENT_SITE === "generic" && posts.size === 0) {
     try {
       root.querySelectorAll("article, [role='article']").forEach(el => {
@@ -612,22 +628,28 @@ function extractText(post) {
   if (isExcludedWidget(post)) return null;
 
   // 1. Try known specific text selectors for post body
-  const selectors = CURRENT_SITE === "substack" ? [
-    ".post-preview-description",
-    ".subtitle",
-    ".post-preview-title",
-    ".body.markup",
-    ".post-body",
-    "h2 ~ p",
-    "p"
-  ] : [
-    ".feed-shared-update-v2__description",
-    ".feed-shared-inline-show-more-text",
-    ".update-components-text",
-    ".feed-shared-text",
-    "[data-ad-preview='message']",
-    ".break-words"
-  ];
+  const selectors = CURRENT_SITE === "substack"
+    ? [
+        ".post-preview-description",
+        ".subtitle",
+        ".post-preview-title",
+        ".body.markup",
+        ".post-body",
+        "h2 ~ p",
+        "p"
+      ]
+    : CURRENT_SITE === "twitter"
+      ? [
+          "[data-testid='tweetText']"
+        ]
+      : [
+          ".feed-shared-update-v2__description",
+          ".feed-shared-inline-show-more-text",
+          ".update-components-text",
+          ".feed-shared-text",
+          "[data-ad-preview='message']",
+          ".break-words"
+        ];
 
   for (const sel of selectors) {
     const el = post.querySelector(sel);
@@ -672,6 +694,10 @@ function hasSpecificJobPosition(text) {
 }
 
 function postId(post) {
+  if (CURRENT_SITE === "twitter") {
+    const statusLink = post.querySelector("a[href*='/status/']");
+    if (statusLink) return statusLink.getAttribute("href");
+  }
   return (
     post.getAttribute("data-urn") ||
     post.getAttribute("data-activity-urn") ||
@@ -742,7 +768,7 @@ function flush() {
   console.log(`[Feed Slop Filter] Classifying batch of ${batch.length} posts...`);
 
   chrome.runtime.sendMessage(
-    { type: "classify", posts: batch.map(p => ({ id: p.id, text: p.text })) },
+    { type: "classify", site: CURRENT_SITE, posts: batch.map(p => ({ id: p.id, text: p.text })) },
     resp => {
       isFlushing = false;
 
