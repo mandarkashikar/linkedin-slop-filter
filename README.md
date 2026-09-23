@@ -2,9 +2,9 @@
 
 A Chrome extension that watches your LinkedIn feed and fades posts that are likely AI-generated filler, thought-leader platitudes, or ads.
 
-<video src="assets/demo.mp4" controls poster="assets/demo-thumbnail.png" width="100%">
-  <a href="assets/demo.mp4">Watch demo video</a>
-</video>
+[![LinkedIn Slop Filter live demo](assets/demo-inline.gif)](assets/demo.mp4)
+
+_The demo plays inline on GitHub. Click it to open the full-quality MP4._
 
 > Live feed classification using **Jev (TypeSafe AI)**: real-time post evaluation, non-slop verification (`✓ 0% slop`), automated fading of AI slop and ads (`⚠️ 90% slop`), and hiring post detection with quick feed navigation.
 
