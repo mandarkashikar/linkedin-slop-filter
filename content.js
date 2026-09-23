@@ -154,50 +154,84 @@ chrome.storage.onChanged.addListener(changes => {
 
 // --- DOM helpers -----------------------------------------------------------
 
+function isExcludedWidget(el) {
+  if (!el || el === document.body || el.tagName === "MAIN") return true;
+
+  // 1. Exclude "Start a post" creation widget (any trigger, wrapper, or creation box)
+  if (
+    el.closest(".share-box-feed-entry, .share-box-feed-entry__wrapper, [data-view-name*='feed-creation'], .share-box") ||
+    el.querySelector(".share-box-feed-entry, .share-box-feed-entry__wrapper, [data-view-name*='feed-creation'], .share-box-feed-entry__trigger") ||
+    el.classList.contains("share-box-feed-entry") ||
+    el.classList.contains("share-box-feed-entry__wrapper") ||
+    el.classList.contains("share-box-feed-entry__trigger") ||
+    /start\s+a\s+post/i.test(el.textContent || "")
+  ) {
+    const hasAuthor = el.querySelector(".update-components-actor, .feed-shared-actor, [data-view-name*='actor']");
+    const hasLike = el.querySelector("button[aria-label*='Like' i], button[aria-label*='React' i]");
+    if (!hasAuthor || !hasLike) {
+      return true; // Exclude creation box!
+    }
+  }
+
+  // 2. Exclude recommendation carousels / side modules / jobs / puzzles
+  if (
+    el.querySelector("[data-view-name*='job-card'], .feed-shared-news-module") ||
+    el.classList.contains("feed-shared-news-module") ||
+    el.textContent?.includes("Jobs recommended for you") ||
+    el.textContent?.includes("Add to your feed") ||
+    el.textContent?.includes("Today’s puzzles")
+  ) {
+    return true; // Exclude widget!
+  }
+
+  // 3. Exclude infinite scroll containers or sentinels
+  if (
+    el.classList.contains("scaffold-finite-scroll") ||
+    el.classList.contains("scaffold-finite-scroll__content") ||
+    el.classList.contains("scaffold-finite-scroll__loading-indicator")
+  ) {
+    return true;
+  }
+
+  return false;
+}
+
 function findPosts(root = document) {
   if (document.hidden) return [];
   const posts = new Set();
 
-  // 1. Primary: Direct children of feed container via action buttons (100% reliable)
+  // 1. Primary: Walk up from action buttons (Like, React, Comment, Repost)
   try {
     const actionButtons = root.querySelectorAll(
       "button[aria-label*='Like' i], button[aria-label*='React' i], button[aria-label*='Comment' i], button[aria-label*='Repost' i], " +
       "[role='button'][aria-label*='Like' i], [role='button'][aria-label*='React' i]"
     );
-    for (const btn of actionButtons) {
-      // Direct child of feed content is always the exact post card
-      const directFeedItem = btn.closest(".scaffold-finite-scroll__content > *");
-      if (directFeedItem && !directFeedItem.classList.contains("scaffold-finite-scroll__loading-indicator")) {
-        posts.add(directFeedItem);
-        continue;
-      }
 
-      // Fallback walking up to find nearest card boundary
+    for (const btn of actionButtons) {
       let p = btn.parentElement;
+      let postCard = null;
       while (p && p !== document.body && p.tagName !== "MAIN") {
-        if (
-          p.classList.contains("feed-shared-update-v2") ||
-          p.getAttribute("role") === "listitem" ||
-          p.getAttribute("data-urn") ||
-          p.getAttribute("data-id")
-        ) {
-          if (!p.classList.contains("scaffold-finite-scroll") && !p.classList.contains("scaffold-finite-scroll__content")) {
-            posts.add(p);
-          }
+        if (p.classList.contains("scaffold-finite-scroll") || p.classList.contains("scaffold-finite-scroll__content")) {
           break;
         }
-        if (
-          p.offsetHeight >= 120 &&
-          p.offsetHeight <= 3000 &&
-          p.offsetWidth >= 250 &&
-          p.querySelector("button[aria-label*='Follow' i], [data-view-name*='actor'], .feed-shared-actor, .update-components-actor")
-        ) {
-          if (!p.classList.contains("scaffold-finite-scroll") && !p.classList.contains("scaffold-finite-scroll__content")) {
-            posts.add(p);
+        // A true post card contains the author/actor header
+        if (p.querySelector(".update-components-actor, .feed-shared-actor, [data-view-name*='actor'], .feed-shared-actor__container-link")) {
+          postCard = p;
+          // If this ancestor is a top-level listitem or update-v2, stop here
+          if (
+            p.classList.contains("feed-shared-update-v2") ||
+            p.getAttribute("role") === "listitem" ||
+            p.getAttribute("data-urn") ||
+            p.getAttribute("data-id") ||
+            p.tagName === "ARTICLE"
+          ) {
+            break;
           }
-          break;
         }
         p = p.parentElement;
+      }
+      if (postCard && !isExcludedWidget(postCard)) {
+        posts.add(postCard);
       }
     }
   } catch (e) {}
@@ -209,7 +243,8 @@ function findPosts(root = document) {
       for (const child of feedContent.children) {
         if (
           child.offsetHeight >= 120 &&
-          !child.classList.contains("scaffold-finite-scroll__loading-indicator") &&
+          !isExcludedWidget(child) &&
+          child.querySelector(".update-components-actor, .feed-shared-actor, [data-view-name*='actor']") &&
           child.querySelector("button[aria-label*='Like' i], button[aria-label*='React' i], .feed-shared-social-action-bar, .social-details-social-actions")
         ) {
           posts.add(child);
@@ -218,67 +253,30 @@ function findPosts(root = document) {
     }
   } catch (e) {}
 
-  // 3. Fallback for demo page and generic feed cards
+  // 3. Fallback for demo page and direct update cards
   try {
     root.querySelectorAll("article.feed-shared-update-v2, .feed-shared-update-v2").forEach(el => {
-      if (el.offsetHeight >= 120 && !el.classList.contains("scaffold-finite-scroll__content")) {
+      if (el.offsetHeight >= 120 && !isExcludedWidget(el)) {
         posts.add(el);
       }
     });
   } catch (e) {}
 
-  // Deduplication: Keep outermost post card, discard any inner nested items!
+  // Deduplication: Keep outermost post card, discard any inner nested elements
   const rawList = Array.from(posts);
-  const filtered = rawList.filter(el => {
+  return rawList.filter(el => {
+    if (isExcludedWidget(el)) return false;
     for (const other of rawList) {
       if (other !== el && other.contains(el)) {
-        return false; // el is nested inside other, drop el and keep the outer card!
+        return false; // el is nested inside other, keep the outer other!
       }
     }
-    return true;
-  });
-
-  // Filter out LinkedIn UI widgets (e.g. "Start a post", recommendation carousels, news modules)
-  return filtered.filter(el => {
-    // 1. Exclude "Start a post" box
-    if (
-      el.querySelector("button.share-box-feed-entry__trigger, [data-view-name*='feed-creation'], .share-box-feed-entry") ||
-      el.classList.contains("share-box-feed-entry") ||
-      el.classList.contains("share-box-feed-entry__wrapper") ||
-      (el.textContent?.includes("Start a post") && !el.querySelector("button[aria-label*='Like' i], button[aria-label*='React' i]"))
-    ) {
-      return false;
-    }
-
-    // 2. Exclude recommendation carousels / side modules / jobs / puzzles
-    if (
-      el.querySelector("[data-view-name*='job-card'], .feed-shared-news-module") ||
-      el.classList.contains("feed-shared-news-module") ||
-      el.textContent?.includes("Jobs recommended for you") ||
-      el.textContent?.includes("Add to your feed") ||
-      el.textContent?.includes("Today’s puzzles")
-    ) {
-      return false;
-    }
-
-    // 3. Legitimate post verification: Must have social interaction buttons (Like, React, Comment, Repost)
-    const hasInteraction = el.querySelector(
-      "button[aria-label*='Like' i], button[aria-label*='React' i], button[aria-label*='Comment' i], .feed-shared-social-action-bar, .social-details-social-actions"
-    );
-    if (!hasInteraction && !el.classList.contains("feed-shared-update-v2") && el.tagName !== "ARTICLE") {
-      return false;
-    }
-
     return true;
   });
 }
 
 function extractText(post) {
-  // Safeguard: Discard if element is UI creation box
-  const rawPreview = post.textContent || "";
-  if (rawPreview.includes("Start a post") && !post.querySelector("button[aria-label*='Like' i], button[aria-label*='React' i]")) {
-    return null;
-  }
+  if (isExcludedWidget(post)) return null;
 
   // 1. Try known specific text selectors for post body
   const selectors = [
