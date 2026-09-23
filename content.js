@@ -425,8 +425,10 @@ function flush() {
         removeBadge(item.el, item.id);
 
         if (result.error) {
-          console.warn(`[LinkedIn Slop Filter] Post ${result.id} failed classification:`, result.error);
-          item.el.removeAttribute(CHECKED_ATTR); // allow retry on transient error
+          console.warn(`[LinkedIn Slop Filter] Post ${result.id} classification error:`, result.error);
+          // Graceful fallback to clean state so the box/badge don't abruptly vanish
+          item.el.classList.add("slop-box-clean");
+          setBadge(item.el, item.id, `✓ 0% slop`, "jev-badge-clean");
           continue;
         }
 
@@ -443,8 +445,8 @@ function flush() {
           fadedCount++;
           console.log(`[LinkedIn Slop Filter] Faded post ${result.id} with label "${label}"`);
         } else {
-          // Clean post: Remove scanning box outline completely!
-          // Show subtle clean checkmark badge in top-right:
+          // Clean post: transition blue dashed square to green solid square, and spinner to checkmark badge
+          item.el.classList.add("slop-box-clean");
           setBadge(item.el, item.id, `✓ ${pct}% slop`, "jev-badge-clean");
         }
       }

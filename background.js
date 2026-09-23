@@ -160,7 +160,7 @@ async function classifyOllama(posts, threshold, model) {
 
         const data = await res.json();
         console.log(`[Slop Filter] Ollama response for post ${id}:`, data.response);
-        const parsed = JSON.parse(data.response);
+        const parsed = safeParseJson(data.response) || {};
         const slop = clamp(parsed.slop ?? 0);
         const ad   = clamp(parsed.ad   ?? 0);
         return { id, noul: Math.max(slop, ad), slop, ad };
@@ -172,6 +172,28 @@ async function classifyOllama(posts, threshold, model) {
   );
 
   return { results, threshold };
+}
+
+function safeParseJson(raw) {
+  if (!raw) return null;
+  let cleaned = raw.trim();
+  // Strip markdown code fences if present: ```json ... ```
+  if (cleaned.startsWith("```")) {
+    cleaned = cleaned.replace(/^```(?:json)?\s*/i, "").replace(/\s*```$/, "").trim();
+  }
+  try {
+    return JSON.parse(cleaned);
+  } catch (e) {}
+
+  // Fallback: extract substring between first { and last }
+  const start = cleaned.indexOf("{");
+  const end = cleaned.lastIndexOf("}");
+  if (start !== -1 && end !== -1 && end > start) {
+    try {
+      return JSON.parse(cleaned.slice(start, end + 1));
+    } catch (e) {}
+  }
+  return null;
 }
 
 function clamp(v) {
