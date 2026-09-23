@@ -215,10 +215,47 @@ function findPosts(root = document) {
     return true;
   });
 
-  return filtered;
+  // Filter out LinkedIn UI widgets (e.g. "Start a post", recommendation carousels, news modules)
+  return filtered.filter(el => {
+    // 1. Exclude "Start a post" box
+    if (
+      el.querySelector("button.share-box-feed-entry__trigger, [data-view-name*='feed-creation'], .share-box-feed-entry") ||
+      el.classList.contains("share-box-feed-entry") ||
+      el.classList.contains("share-box-feed-entry__wrapper") ||
+      el.innerText?.includes("Start a post")
+    ) {
+      return false;
+    }
+
+    // 2. Exclude recommendation carousels / side modules / jobs
+    if (
+      el.querySelector("[data-view-name*='job-card'], .feed-shared-news-module") ||
+      el.innerText?.includes("Jobs recommended for you") ||
+      el.innerText?.includes("Add to your feed") ||
+      el.innerText?.includes("Today’s puzzles")
+    ) {
+      return false;
+    }
+
+    // 3. Legitimate post verification: Must have interaction buttons (Like, React, Comment, Repost)
+    const hasInteraction = el.querySelector(
+      "button[aria-label*='Like' i], button[aria-label*='React' i], button[aria-label*='Comment' i], .feed-shared-social-action-bar, .social-details-social-actions"
+    );
+    if (!hasInteraction && !el.classList.contains("feed-shared-update-v2") && el.tagName !== "ARTICLE") {
+      return false;
+    }
+
+    return true;
+  });
 }
 
 function extractText(post) {
+  // Safeguard: Discard if element is UI creation box
+  const rawPreview = post.innerText || "";
+  if (rawPreview.includes("Start a post") && !post.querySelector("button[aria-label*='Like' i], button[aria-label*='React' i]")) {
+    return null;
+  }
+
   // 1. Try known specific text selectors
   const selectors = [
     ".feed-shared-update-v2__description",

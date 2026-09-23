@@ -81,16 +81,39 @@ async function classifyJev(posts, apiKey, threshold) {
 
 // --- Ollama ------------------------------------------------------------------
 
-const OLLAMA_PROMPT = (text) => `You are a LinkedIn post classifier. Analyze the following post and return ONLY a JSON object with these two fields:
-- "slop": float 0.0–1.0 — how much this post is AI-generated filler, thought-leader platitudes, vague inspiration, or generic advice with no original insight
-- "ad": float 0.0–1.0 — how much this post is promotional advertising or sponsored content
+const OLLAMA_PROMPT = (text) => `You are an expert LinkedIn feed curator. Analyze the post text below and rate it on two scales from 0.0 to 1.0:
 
-Post:
+1. "slop" (0.0 to 1.0):
+- HIGH (0.7–1.0):
+  * Low-effort AI-generated generic filler.
+  * Empty thought-leader platitudes and generic motivational quotes ("Mindset is everything", "I woke up at 5 AM...").
+  * Engagement bait ("Agree?", "Thoughts?", "Drop an emoji below").
+  * Generic superficial lists ("Top 10 AI tools you must know 🚀") without original depth.
+- LOW (0.0–0.2):
+  * Authentic career milestones ("Excited to share I joined Google...", "celebrating 3 years...").
+  * Company acquisitions, funding announcements, or real business news ("Polarity was acquired by Wander").
+  * Concrete engineering case studies, post-mortems, or technical questions with real details/metrics.
+  * Organic personal reflections or stories with authentic human voice and specific details.
+
+2. "ad" (0.0 to 1.0):
+- HIGH (0.7–1.0):
+  * Explicit sponsored advertising or promotional campaigns.
+  * Aggressive product sales pitches ("Book a demo today", "Use promo code", "Buy our course now").
+  * Lead generation funnels ("Comment 'INFO' to receive my free template").
+- LOW (0.0–0.2):
+  * Organic founder sharing what they built or asking for developer feedback.
+  * Legitimate team hiring announcements ("We are hiring a Senior PM in Toronto").
+  * General company/industry news or partnership announcements.
+
+3. "ui_noise": If the text appears to be UI navigation buttons, creation prompts (e.g. "Start a post", "Video Photo Write article"), or empty noise, return {"slop": 0.0, "ad": 0.0}.
+
+Post text:
 """
 ${text.slice(0, 1500)}
 """
 
-Respond with ONLY the JSON object, nothing else.`;
+Return ONLY a JSON object with this exact format:
+{"slop": <float between 0.0 and 1.0>, "ad": <float between 0.0 and 1.0>}`;
 
 async function getAvailableOllamaModel(preferredModel) {
   try {
