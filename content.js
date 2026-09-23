@@ -154,95 +154,108 @@ chrome.storage.onChanged.addListener(changes => {
 
 // --- DOM helpers -----------------------------------------------------------
 
-function isPostCard(el) {
-  if (!el || el === document.body || el.tagName === "MAIN") return false;
-
-  // Never match feed containers, wrappers, or lists
-  if (
-    el.classList.contains("scaffold-finite-scroll") ||
-    el.classList.contains("scaffold-finite-scroll__content") ||
-    el.classList.contains("scaffold-layout__main") ||
-    el.getAttribute("role") === "feed" ||
-    el.getAttribute("role") === "list"
-  ) {
-    return false;
-  }
-
-  // Reject UI creation box ("Start a post")
-  if (
-    el.querySelector("button.share-box-feed-entry__trigger, [data-view-name*='feed-creation'], .share-box-feed-entry") ||
-    el.classList.contains("share-box-feed-entry") ||
-    el.classList.contains("share-box-feed-entry__wrapper") ||
-    el.textContent.includes("Start a post")
-  ) {
-    return false;
-  }
-
-  // Reject recommendation modules, news, puzzles
-  if (
-    el.querySelector("[data-view-name*='job-card'], .feed-shared-news-module") ||
-    el.classList.contains("feed-shared-news-module") ||
-    el.textContent.includes("Jobs recommended for you") ||
-    el.textContent.includes("Add to your feed") ||
-    el.textContent.includes("Today’s puzzles")
-  ) {
-    return false;
-  }
-
-  // Must have reasonable card dimensions
-  if (el.offsetHeight < 80 || el.offsetWidth < 250) {
-    return false;
-  }
-
-  // Legitimate post verification: Must have social interaction buttons (Like, React, Comment, Repost)
-  // or be an article / feed-shared-update-v2
-  const hasInteraction = el.querySelector(
-    "button[aria-label*='Like' i], button[aria-label*='React' i], button[aria-label*='Comment' i], .feed-shared-social-action-bar, .social-details-social-actions"
-  );
-  if (!hasInteraction && !el.classList.contains("feed-shared-update-v2") && el.tagName !== "ARTICLE") {
-    return false;
-  }
-
-  return true;
-}
-
 function findPosts(root = document) {
   if (document.hidden) return [];
-  const cards = [];
+  const posts = new Set();
 
-  // Match only individual post cards directly (never wrappers or outer containers)
-  const selectors = [
-    "div.feed-shared-update-v2",
-    "article.feed-shared-update-v2",
-    "div[data-view-name='feed-full-update']",
-    "div[data-urn*='urn:li:activity']"
-  ];
+  // 1. Structural search via action buttons (Like, Comment, Repost)
+  try {
+    const likeButtons = root.querySelectorAll("button[aria-label*='Like' i], button[aria-label*='React' i], button[aria-label*='Comment' i]");
+    for (const btn of likeButtons) {
+      let p = btn.parentElement;
+      while (p && p !== document.body && p.tagName !== "MAIN") {
+        if (
+          p.getAttribute("role") === "listitem" ||
+          p.getAttribute("data-urn") ||
+          p.getAttribute("data-id") ||
+          p.classList.contains("feed-shared-update-v2")
+        ) {
+          if (!p.classList.contains("scaffold-finite-scroll") && !p.classList.contains("scaffold-finite-scroll__content")) {
+            posts.add(p);
+          }
+          break;
+        }
+        if (
+          p.offsetHeight >= 120 &&
+          p.offsetHeight <= 3000 &&
+          p.offsetWidth >= 250 &&
+          p.querySelector("button[aria-label*='Follow' i], [data-view-name*='actor'], .feed-shared-actor, .update-components-actor")
+        ) {
+          if (!p.classList.contains("scaffold-finite-scroll") && !p.classList.contains("scaffold-finite-scroll__content")) {
+            posts.add(p);
+          }
+          break;
+        }
+        p = p.parentElement;
+      }
+    }
+  } catch (e) {}
 
-  for (const sel of selectors) {
-    try {
-      root.querySelectorAll(sel).forEach(el => {
-        if (isPostCard(el)) cards.push(el);
-      });
-    } catch (e) {}
-  }
+  // 2. Direct attribute selectors (role='listitem', data-urn, etc.)
+  try {
+    const listItems = root.querySelectorAll("[role='listitem'], [data-urn*='activity'], [data-activity-urn], .feed-shared-update-v2");
+    for (const item of listItems) {
+      if (
+        item.offsetHeight >= 100 &&
+        item.offsetHeight <= 3000 &&
+        item.offsetWidth >= 250 &&
+        !item.classList.contains("scaffold-finite-scroll") &&
+        !item.classList.contains("scaffold-finite-scroll__content")
+      ) {
+        posts.add(item);
+      }
+    }
+  } catch (e) {}
 
-  // Deduplication: If card A contains card B (e.g. reshare / quoted post inside main post),
-  // keep only the top-level outer post card.
-  const uniqueCards = Array.from(new Set(cards));
-  return uniqueCards.filter(el => {
-    for (const other of uniqueCards) {
-      if (other !== el && other.contains(el)) {
-        return false; // el is nested inside other, ignore nested
+  // 3. Demo page fallback
+  try {
+    root.querySelectorAll("article.feed-shared-update-v2").forEach(el => posts.add(el));
+  } catch (e) {}
+
+  // Deduplication: Keep innermost card if nested, or outermost card
+  const rawList = Array.from(posts);
+  const filtered = rawList.filter(el => {
+    for (const other of rawList) {
+      if (other !== el && el.contains(other)) {
+        return false;
       }
     }
     return true;
   });
-}
 
-function isElementNearViewport(el, margin = 600) {
-  const rect = el.getBoundingClientRect();
-  const vHeight = window.innerHeight || document.documentElement.clientHeight;
-  return rect.bottom >= -margin && rect.top <= vHeight + margin;
+  // Filter out LinkedIn UI widgets (e.g. "Start a post", recommendation carousels, news modules)
+  return filtered.filter(el => {
+    // 1. Exclude "Start a post" box
+    if (
+      el.querySelector("button.share-box-feed-entry__trigger, [data-view-name*='feed-creation'], .share-box-feed-entry") ||
+      el.classList.contains("share-box-feed-entry") ||
+      el.classList.contains("share-box-feed-entry__wrapper") ||
+      (el.textContent?.includes("Start a post") && !el.querySelector("button[aria-label*='Like' i], button[aria-label*='React' i]"))
+    ) {
+      return false;
+    }
+
+    // 2. Exclude recommendation carousels / side modules / jobs / sentinel
+    if (
+      el.querySelector("[data-view-name*='job-card'], .feed-shared-news-module") ||
+      el.classList.contains("feed-shared-news-module") ||
+      el.textContent?.includes("Jobs recommended for you") ||
+      el.textContent?.includes("Add to your feed") ||
+      el.textContent?.includes("Today’s puzzles")
+    ) {
+      return false;
+    }
+
+    // 3. Legitimate post verification: Must have social interaction buttons (Like, React, Comment, Repost)
+    const hasInteraction = el.querySelector(
+      "button[aria-label*='Like' i], button[aria-label*='React' i], button[aria-label*='Comment' i], .feed-shared-social-action-bar, .social-details-social-actions"
+    );
+    if (!hasInteraction && !el.classList.contains("feed-shared-update-v2") && el.tagName !== "ARTICLE") {
+      return false;
+    }
+
+    return true;
+  });
 }
 
 function extractText(post) {
@@ -415,7 +428,9 @@ function flush() {
           fadedCount++;
           console.log(`[LinkedIn Slop Filter] Faded post ${result.id} with label "${label}"`);
         } else {
-          // Clean post: Remove scanning box outline, show subtle clean badge
+          // Clean post: Remove scanning box outline completely!
+          // No permanent outline on clean posts to preserve native LinkedIn styling.
+          // Show subtle clean checkmark badge in top-right:
           setBadge(item.el, item.id, `✓ ${pct}% slop`, "jev-badge-clean");
         }
       }
@@ -439,37 +454,46 @@ function cleanup(batch) {
   });
 }
 
+// --- Automatic Infinite Scroll Continuity -----------------------------------
+
+function checkAndTriggerInfiniteScroll() {
+  try {
+    const loadBtn = document.querySelector(
+      ".scaffold-finite-scroll__load-button, button[data-view-name*='load-more'], button[data-view-name*='finite-scroll']"
+    );
+    if (loadBtn && loadBtn.offsetParent !== null) {
+      loadBtn.click();
+    }
+  } catch (e) {}
+}
+
 // --- High-Performance Scrolling & Scanning ---------------------------------
 
 function scanDOM() {
   const posts = findPosts();
-  for (const post of posts) {
-    // Only enqueue posts that are near or in the viewport to avoid backlogs and reflows
-    if (isElementNearViewport(post)) {
-      enqueue(post);
-    }
+  if (posts.length) {
+    posts.forEach(enqueue);
   }
   updateIndicator(`Slop Filter: ${scannedCount} scanned · ${fadedCount} faded`);
+  checkAndTriggerInfiniteScroll();
 }
 
 // Initial scan
 scanDOM();
 
+// Smooth periodic scan every 1.5 seconds so newly rendered posts are picked up
+setInterval(scanDOM, 1500);
+
 // Passive, debounced scroll listener:
-// Never executes heavy DOM logic while the user is actively scrolling!
 let scrollDebounce = null;
 window.addEventListener(
   "scroll",
   () => {
     if (scrollDebounce) clearTimeout(scrollDebounce);
-    scrollDebounce = setTimeout(scanDOM, 350);
+    scrollDebounce = setTimeout(() => {
+      scrollDebounce = null;
+      scanDOM();
+    }, 250);
   },
   { passive: true }
 );
-
-// Fallback idle scan every 3 seconds (smooth and non-intrusive)
-setInterval(() => {
-  if (!scrollDebounce) {
-    scanDOM();
-  }
-}, 3000);
