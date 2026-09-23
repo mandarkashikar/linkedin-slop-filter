@@ -1,11 +1,19 @@
-// LinkedIn Slop Filter — content script
+// Feed Slop Filter — content script
 // Watches the feed, extracts post text, asks classifier, fades slop.
+// Supports: LinkedIn, Substack
 
 const CHECKED_ATTR = "data-slop-checked";
 const FADE_CLASS   = "jev-slop-faded";
 
+const CURRENT_SITE = (() => {
+  const h = window.location.hostname;
+  if (h.includes("linkedin.com")) return "linkedin";
+  if (h.includes("substack.com")) return "substack";
+  return "generic";
+})();
+
 console.info(
-  "%c[LinkedIn Slop Filter] ACTIVE %cWatching feed on " + window.location.href,
+  "%c[Feed Slop Filter] ACTIVE %cWatching " + CURRENT_SITE + " on " + window.location.href,
   "background: #0a66c2; color: white; padding: 4px 8px; border-radius: 4px; font-weight: bold;",
   "color: #0a66c2; font-weight: bold; margin-left: 8px;"
 );
@@ -428,17 +436,17 @@ chrome.storage.sync.get({ enabled: true, threshold: 0.75 }, s => {
   ENABLED   = s.enabled;
   THRESHOLD = s.threshold;
   if (!ENABLED) updateIndicator("Slop Filter Disabled", "disabled");
-  console.log(`[LinkedIn Slop Filter] Settings loaded: enabled=${ENABLED}, threshold=${THRESHOLD}`);
+  console.log(`[Feed Slop Filter] Settings loaded: enabled=${ENABLED}, threshold=${THRESHOLD}`);
 });
 
 chrome.storage.onChanged.addListener(changes => {
   if (changes.enabled) {
     ENABLED = changes.enabled.newValue;
-    console.log(`[LinkedIn Slop Filter] Enabled state updated: ${ENABLED}`);
+    console.log(`[Feed Slop Filter] Enabled state updated: ${ENABLED}`);
   }
   if (changes.threshold) {
     THRESHOLD = changes.threshold.newValue;
-    console.log(`[LinkedIn Slop Filter] Threshold updated: ${THRESHOLD}`);
+    console.log(`[Feed Slop Filter] Threshold updated: ${THRESHOLD}`);
   }
 });
 
@@ -563,6 +571,30 @@ function findPosts(root = document) {
     });
   } catch (e) {}
 
+  // Strategy 3: Substack post cards (feed, inbox, archive pages)
+  if (CURRENT_SITE === "substack") {
+    try {
+      root.querySelectorAll(
+        "article, .post-preview, [class*='post-preview'], [class*='inbox-item'], [data-testid='post-preview']"
+      ).forEach(el => {
+        if (el.offsetHeight >= 80 && (el.textContent?.trim().length ?? 0) > 30) {
+          posts.add(el);
+        }
+      });
+    } catch (e) {}
+  }
+
+  // Strategy 4: Generic <article> fallback for any other site
+  if (CURRENT_SITE === "generic" && posts.size === 0) {
+    try {
+      root.querySelectorAll("article, [role='article']").forEach(el => {
+        if (el.offsetHeight >= 100 && (el.textContent?.trim().length ?? 0) > 50) {
+          posts.add(el);
+        }
+      });
+    } catch (e) {}
+  }
+
   // Deduplication: Discard inner elements if an outer containing post card is also present
   const rawList = Array.from(posts);
   return rawList.filter(el => {
@@ -580,7 +612,15 @@ function extractText(post) {
   if (isExcludedWidget(post)) return null;
 
   // 1. Try known specific text selectors for post body
-  const selectors = [
+  const selectors = CURRENT_SITE === "substack" ? [
+    ".post-preview-description",
+    ".subtitle",
+    ".post-preview-title",
+    ".body.markup",
+    ".post-body",
+    "h2 ~ p",
+    "p"
+  ] : [
     ".feed-shared-update-v2__description",
     ".feed-shared-inline-show-more-text",
     ".update-components-text",
@@ -682,7 +722,7 @@ function enqueue(post) {
   setBadge(post, id, '<span class="slop-spinner"></span> classifying…', "jev-badge-pending");
 
   scannedCount++;
-  console.log(`[LinkedIn Slop Filter] Enqueued post ${id}: "${text.slice(0, 50).replace(/\n/g, ' ')}..."`);
+  console.log(`[Feed Slop Filter] Enqueued post ${id}: "${text.slice(0, 50).replace(/\n/g, ' ')}..."`);
   queue.push({ id, text, el: post });
   scheduleFlush();
 }
@@ -699,7 +739,7 @@ function flush() {
 
   // Process in small batches of 2 sequentially to avoid CPU/connection contention
   const batch = queue.splice(0, 2);
-  console.log(`[LinkedIn Slop Filter] Classifying batch of ${batch.length} posts...`);
+  console.log(`[Feed Slop Filter] Classifying batch of ${batch.length} posts...`);
 
   chrome.runtime.sendMessage(
     { type: "classify", posts: batch.map(p => ({ id: p.id, text: p.text })) },
@@ -707,19 +747,19 @@ function flush() {
       isFlushing = false;
 
       if (chrome.runtime.lastError) {
-        console.error("[LinkedIn Slop Filter] Background message error:", chrome.runtime.lastError.message);
+        console.error("[Feed Slop Filter] Background message error:", chrome.runtime.lastError.message);
         cleanup(batch);
         if (queue.length) scheduleFlush();
         return;
       }
       if (!resp) {
-        console.warn("[LinkedIn Slop Filter] Empty response from background worker");
+        console.warn("[Feed Slop Filter] Empty response from background worker");
         cleanup(batch);
         if (queue.length) scheduleFlush();
         return;
       }
       if (resp.error) {
-        console.error("[LinkedIn Slop Filter] Backend returned error:", resp.error);
+        console.error("[Feed Slop Filter] Backend returned error:", resp.error);
         updateIndicator("Slop Filter: Backend Error", "error");
         cleanup(batch);
         if (queue.length) scheduleFlush();
@@ -727,7 +767,7 @@ function flush() {
       }
 
       const threshold = resp.threshold ?? THRESHOLD;
-      console.log(`[LinkedIn Slop Filter] Received classification results for ${resp.results?.length || 0} posts (threshold=${threshold})`);
+      console.log(`[Feed Slop Filter] Received classification results for ${resp.results?.length || 0} posts (threshold=${threshold})`);
 
       for (const result of (resp.results ?? [])) {
         const item = batch.find(p => p.id === result.id);
@@ -737,18 +777,18 @@ function flush() {
         removeBadge(item.el, item.id);
 
         if (result.error) {
-          console.warn(`[LinkedIn Slop Filter] Post ${result.id} classification error:`, result.error);
+          console.warn(`[Feed Slop Filter] Post ${result.id} classification error:`, result.error);
           // Graceful fallback to clean state so the box/badge don't abruptly vanish
           item.el.classList.add("slop-box-clean");
           setBadge(item.el, item.id, `✓ 0% slop`, "jev-badge-clean");
           continue;
         }
 
-        const hasPosition = hasSpecificJobPosition(item.text);
-        const isHiring = Boolean(result.is_hiring && hasPosition);
+        const hasPosition = CURRENT_SITE === "linkedin" && hasSpecificJobPosition(item.text);
+        const isHiring = CURRENT_SITE === "linkedin" && Boolean(result.is_hiring && hasPosition);
         const score = isHiring ? 0 : (result.noul ?? 0);
         const pct = Math.round(score * 100);
-        console.log(`[LinkedIn Slop Filter] Post ${result.id} -> slop=${result.slop}, ad=${result.ad}, hiring=${result.hiring}, hasPosition=${hasPosition}, isHiring=${isHiring}`);
+        console.log(`[Feed Slop Filter] Post ${result.id} -> slop=${result.slop}, ad=${result.ad}, hiring=${result.hiring}, hasPosition=${hasPosition}, isHiring=${isHiring}`);
 
         // Transition progress icon to %slop / Hiring and update square outline
         if (isHiring) {
@@ -758,14 +798,14 @@ function flush() {
             hiringPosts.push(item.el);
             updateHiringNavUI();
           }
-          console.log(`[LinkedIn Slop Filter] Marked post ${result.id} as Hiring`);
+          console.log(`[Feed Slop Filter] Marked post ${result.id} as Hiring`);
         } else if (score >= threshold) {
           item.el.classList.add("slop-box-slop");
           item.el.classList.add(FADE_CLASS);
           const label = result.ad > result.slop ? `📢 ${pct}% ad` : `⚠️ ${pct}% slop`;
           setBadge(item.el, item.id, label, "jev-badge-slop");
           fadedCount++;
-          console.log(`[LinkedIn Slop Filter] Faded post ${result.id} with label "${label}"`);
+          console.log(`[Feed Slop Filter] Faded post ${result.id} with label "${label}"`);
         } else {
           // Clean post: transition blue dashed square to green solid square, and spinner to checkmark badge
           item.el.classList.add("slop-box-clean");
